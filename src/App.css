@@ -1,0 +1,12 @@
+/*
+  AQUÍ ESTÁ EL CAMBIO:
+  En lugar de 'div', usamos '.app-container'.
+  Ahora este estilo SOLO se aplica al elemento
+  que tenga className="app-container".
+*/
+.app-container {
+    text-align: center;
+   /* margin-top: 50px; */
+    font-family: Arial, sans-serif;
+}
+

@@ -1,0 +1,114 @@
+.configuracion-container {
+  max-width: 1100px;
+  margin: 0 auto;
+  background: #ffffff;
+  padding: 24px 28px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.configuracion-descripcion {
+  color: #4a5568;
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.configuracion-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.configuracion-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.configuracion-campo {
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.configuracion-campo label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #1f2937;
+}
+
+.configuracion-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.configuracion-prefijo {
+  padding: 10px 12px;
+  background: #1f2937;
+  color: #ffffff;
+  border-radius: 8px;
+  font-weight: 700;
+  min-width: 72px;
+  text-align: center;
+}
+
+.configuracion-campo input {
+  flex: 1 1 0;
+  min-width: 0;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 16px;
+  background: #ffffff;
+}
+
+.configuracion-campo input:focus {
+  outline: 2px solid #3182ce;
+  border-color: #3182ce;
+}
+
+.configuracion-hint {
+  margin-top: 8px;
+  color: #4a5568;
+  font-size: 14px;
+}
+
+.configuracion-boton {
+  align-self: flex-start;
+  padding: 12px 18px;
+  background: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 700;
+  transition: background 0.2s ease;
+}
+
+.configuracion-boton:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.configuracion-boton:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.configuracion-estado {
+  color: #1f2937;
+  font-weight: 600;
+}
+
+.configuracion-alerta {
+  padding: 16px;
+  background: #fff2cd;
+  border: 1px solid #f6e05e;
+  border-radius: 10px;
+  color: #744210;
+}

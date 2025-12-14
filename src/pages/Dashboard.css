@@ -1,0 +1,18 @@
+/* src/pages/Dashboard.css */
+
+.dashboard-container {
+  padding: 20px;
+}
+
+.dashboard-title {
+  font-size: 24px;
+  font-weight: 300; /* Un peso de fuente más ligero/moderno */
+  color: #333;
+  margin-bottom: 20px;
+}
+
+.dashboard-grid {
+  display: flex;
+  flex-wrap: wrap; /* Esto hace que los botones pasen a la siguiente línea si no caben */
+  gap: 20px; /* El espacio entre los botones */
+}

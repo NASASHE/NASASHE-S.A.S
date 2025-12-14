@@ -1,0 +1,152 @@
+/* src/pages/PaginaVentasMenores.css */
+
+.pagina-ventas-menores h1 {
+  font-weight: 300;
+  border-bottom: 2px solid #28a745; /* Acento Verde para Ingresos */
+  padding-bottom: 10px;
+}
+.pagina-ventas-menores h1 + div { /* Estilo para "Base actual" */
+  text-align: center;
+  font-size: 18px;
+  margin-bottom: 10px;
+}
+
+.layout-ventas-menores {
+  display: flex;
+  gap: 20px;
+}
+
+/* Columna izquierda para el formulario */
+.formulario-venta-menor {
+  flex: 1;
+  background-color: #f9f9f9;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 20px;
+}
+.formulario-venta-menor h2 {
+  margin-top: 0;
+}
+.form-grupo {
+  margin-bottom: 15px;
+}
+.form-grupo label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: 600;
+}
+.form-grupo input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  box-sizing: border-box;
+}
+.form-manual-item {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.btn-anadir-item-menor {
+  width: 100%;
+  padding: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  background-color: #17a2b8; /* Cyan */
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-top: 10px;
+}
+.btn-anadir-item-menor:disabled {
+  background-color: #ccc;
+}
+
+/* Columna derecha para la pre-factura */
+.pre-factura {
+  flex: 1.5;
+  padding: 20px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background-color: #fff;
+}
+.pre-factura h2 {
+  margin-top: 0;
+}
+.pre-factura-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 15px;
+}
+.pre-factura-tabla th,
+.pre-factura-tabla td {
+  border-bottom: 1px solid #eee;
+  padding: 10px;
+  text-align: left;
+}
+.pre-factura-tabla th {
+  background-color: #f4f4f4;
+}
+
+.total-venta-menor {
+  margin-top: 20px;
+  text-align: right;
+  font-size: 24px;
+  font-weight: bold;
+}
+
+/* --- ESTILOS DE BOTONES DE ACCIÓN --- */
+.botones-accion button {
+  width: 100%;
+  padding: 15px;
+  font-size: 18px;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-top: 10px;
+}
+.btn-guardar-venta-menor {
+  background-color: #28a745; /* Verde */
+}
+.btn-guardar-venta-menor:disabled {
+  background-color: #ccc;
+}
+.btn-imprimir-ticket {
+  background-color: #007bff; /* Azul */
+  text-decoration: none;
+  text-align: center;
+}
+.btn-imprimir-ticket:hover {
+  background-color: #0056b3;
+}
+.btn-descargar-ticket {
+  background-color: #17a2b8;
+}
+.btn-descargar-ticket:hover {
+  background-color: #138496;
+}
+.btn-nueva-venta {
+  background-color: #6c757d; /* Gris */
+}
+
+.venta-exitosa {
+  text-align: center;
+  font-size: 18px;
+  font-weight: bold;
+  color: #28a745;
+  margin-top: 15px;
+}
+
+/* --- ACCIONES EN PREFRACTURA --- */
+.prefactura-acciones {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-pre-editar { background-color: #007bff; }
+.btn-pre-editar:disabled { background-color: #ccc; }
+.btn-pre-borrar { background-color: #dc3545; }
+.btn-pre-borrar:disabled { background-color: #ccc; }
+

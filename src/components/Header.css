@@ -1,0 +1,45 @@
+/* src/components/Header.css */
+
+.header-principal {
+  background-color: #e1f7ca;
+  color: black;
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 110px; 
+}
+
+/* 1. ¡CAMBIO! Convertimos el link en un 'flex'
+      para alinear la imagen y el texto */
+.header-logo-link {
+  text-decoration: none;
+  color: black;
+  display: flex;
+  align-items: center; /* Centra verticalmente */
+}
+
+/* 2. ¡NUEVO! Estilo para la imagen del logo */
+.header-logo-img {
+  height: 80px; /* Ajusta este tamaño como quieras */
+  width: auto;
+  margin-right: 15px; /* Espacio entre el logo y el texto */
+}
+
+.header-logo {
+  font-size: 48px;
+  font-weight: bold;
+  line-height: 1;
+}
+
+.header-logo span {
+  font-size: 16px;
+  font-weight: normal;
+  display: block;
+}
+
+.header-nav {
+  display: flex;
+  flex-wrap: wrap; /* Para que los botones se ajusten */
+  justify-content: flex-end;
+}

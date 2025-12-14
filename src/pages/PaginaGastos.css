@@ -1,0 +1,109 @@
+/* src/pages/PaginaGastos.css */
+
+.pagina-gastos h1 {
+  font-weight: 300;
+  border-bottom: 2px solid #fd7e14; /* Acento Naranja para Gastos */
+  padding-bottom: 10px;
+}
+.pagina-gastos h1 + div { /* Estilo para "Base actual" */
+  text-align: center;
+  font-size: 18px;
+  margin-bottom: 20px;
+}
+
+.layout-gastos {
+  display: flex;
+  gap: 20px;
+}
+
+/* Columna izquierda para el formulario */
+.formulario-gasto {
+  flex: 1;
+  background-color: #f9f9f9;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 20px;
+}
+.formulario-gasto h2 {
+  margin-top: 0;
+}
+.form-grupo {
+  margin-bottom: 15px;
+}
+.form-grupo label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: 600;
+}
+.form-grupo input,
+.form-grupo textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  box-sizing: border-box;
+  font-family: inherit;
+  font-size: 16px;
+}
+
+/* Columna derecha para la "prefactura" (botones) */
+.vista-previa-gasto {
+  flex: 1.5;
+  padding: 20px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background-color: #fff;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.vista-previa-gasto h2 {
+  margin-top: 0;
+}
+
+.resumen-gasto {
+  font-size: 18px;
+}
+.resumen-gasto .monto {
+  font-size: 32px;
+  font-weight: bold;
+  color: #dc3545; /* Rojo de egreso */
+  margin-top: 10px;
+}
+
+/* --- ESTILOS DE BOTONES DE ACCIÓN --- */
+.botones-accion button {
+  width: 100%;
+  padding: 15px;
+  font-size: 18px;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-top: 10px;
+}
+.btn-guardar-gasto {
+  background-color: #dc3545; /* Rojo */
+}
+.btn-guardar-gasto:disabled {
+  background-color: #ccc;
+}
+.btn-imprimir-ticket {
+  background-color: #007bff; /* Azul */
+  text-decoration: none;
+  text-align: center;
+}
+.btn-imprimir-ticket:hover {
+  background-color: #0056b3;
+}
+.btn-nuevo-gasto {
+  background-color: #6c757d; /* Gris */
+}
+
+.gasto-exitoso {
+  text-align: center;
+  font-size: 18px;
+  font-weight: bold;
+  color: #28a745;
+  margin-top: 15px;
+}

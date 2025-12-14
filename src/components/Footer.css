@@ -1,0 +1,62 @@
+/* src/components/Footer.css */
+
+.footer-principal {
+  background-color: #e1f7ca; /* El mismo azul oscuro */
+  color: #000000;         /* Un color de texto más suave */
+  padding: 8px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between; /* Para separar el texto de la fecha */
+  font-size: 13px;
+  gap: 12px;
+  flex-wrap: wrap;
+
+  /* Esto "encoge" el footer para que no crezca */
+  flex-shrink: 0;
+}
+
+.footer-user a {
+  color: #000;
+}
+
+.footer-base {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: center;
+}
+
+.base-valor {
+  color: #000000ff;
+  font-weight: bold;
+}
+
+.base-alerta {
+  color: #b22222;
+  font-weight: bold;
+}
+
+.footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-agregar-base {
+  background-color: #4caf50;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out;
+}
+
+.btn-agregar-base:hover {
+  background-color: #3d8b41;
+}
+
+.footer-fecha {
+  font-weight: 600;
+}

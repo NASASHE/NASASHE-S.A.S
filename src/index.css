@@ -1,0 +1,66 @@
+/* Estilos base de tu aplicación (los tenías al inicio) */
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* (Aquí van todos tus otros estilos normales...) */
+
+
+/* --- SECCIÓN DE IMPRESIÓN --- */
+
+/* 1. Oculta el área de impresión EN LA PANTALLA (vista normal) */
+.printable-area {
+  display: none;
+}
+
+/* 2. Reglas que se aplican SÓLO AL IMPRIMIR */
+@media print {
+
+  /* 2.1. Oculta todo por defecto */
+  body * {
+    visibility: hidden;
+  }
+  
+  /* 2.2. Muestra SÓLO el área de impresión y su contenido */
+  .printable-area, .printable-area * {
+    visibility: visible;
+  }
+
+  /* 2.3. Coloca el área de impresión en la esquina superior */
+  .printable-area {
+    display: block; /* Asegúrate de que sea un bloque */
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+
+  /* 2.4. Estilos para el ticket DENTRO del área de impresión */
+  .ticket-container {
+    width: 80mm;
+    margin: 0; /* Sin márgenes extra */
+    box-shadow: none;
+    border: none;
+    background: #fff;
+    color: #000;
+  }
+ 
+  /* 2.5. Estilos de la página de impresión */
+  @page {
+    margin: 0;
+    size: 80mm auto; /* Tamaño de papel POS */
+  }
+  body {
+    margin: 0;
+  }
+
+  /* 2.6. Evita cortes en el código de barras */
+  .ticket-barcode {
+    page-break-inside: avoid;
+  }
+}

@@ -1,0 +1,45 @@
+/* src/components/TicketCompra.css */
+
+/*
+  ESTO ES LO NUEVO:
+  Le dice al navegador el tamaño del PAPEL
+*/
+@page {
+  /* Ancho de 80mm, altura automática según el contenido */
+  size: 80mm auto; 
+  
+  /* Quita TODOS los márgenes (incluyendo encabezados y pies de página) */
+  margin: 0;
+}
+
+
+.ticket-container {
+  width: 288px;
+  padding: 10px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  color: #000;
+  background-color: #fff;
+  box-sizing: border-box;
+}
+
+.ticket-header { text-align: center; }
+.ticket-header h3, .ticket-header p { margin: 0; line-height: 1.2; }
+.ticket-header h3 { font-size: 14px; font-weight: bold; }
+.ticket-info { margin-top: 10px; font-size: 9px; }
+.ticket-info p { margin: 2px 0; }
+.ticket-barcode { text-align: center; margin: 10px 0; }
+.ticket-barcode svg { width: 100% !important; height: 40px !important; }
+.ticket-items table { width: 100%; border-collapse: collapse; font-size: 10px; }
+.ticket-items th, .ticket-items td { padding: 2px 0; }
+.ticket-items th { text-align: left; border-top: 1px dashed #000; border-bottom: 1px dashed #000; }
+.col-mat { width: 40%; }
+.col-cant { width: 15%; text-align: right; }
+.col-prec { width: 20%; text-align: right; }
+.col-tot { width: 25%; text-align: right; }
+.ticket-totales { margin-top: 10px; border-top: 1px dashed #000; padding-top: 5px; }
+.total-row { display: flex; justify-content: space-between; font-size: 11px; }
+.total-row.final { font-weight: bold; font-size: 14px; margin-top: 5px; }
+.ticket-footer { text-align: center; margin-top: 10px; font-size: 9px; }
+
+/* ¡HEMOS QUITADO las reglas @media print de aquí! */

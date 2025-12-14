@@ -1,0 +1,109 @@
+/* src/pages/PaginaProveedores.css */
+
+.pagina-proveedores h1 {
+  font-weight: 300;
+}
+
+/* --- Formulario de Añadir --- */
+.pagina-proveedores .form-container {
+  background-color: #f9f9f9;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+/* ¡AQUÍ ESTÁ EL CAMBIO DE ACENTO! */
+.pagina-proveedores .form-container h2 {
+  margin-top: 0;
+  border-bottom: 2px solid #28a745; /* Acento Verde */
+  padding-bottom: 10px;
+}
+
+.pagina-proveedores .form-container form {
+  display: flex;
+  flex-wrap: wrap; /* Permite que los inputs se ajusten */
+  gap: 15px;
+  align-items: flex-end;
+}
+.pagina-proveedores .form-container div {
+  display: flex;
+  flex-direction: column;
+}
+.pagina-proveedores .form-container label {
+  font-size: 14px;
+  margin-bottom: 5px;
+  font-weight: 600;
+}
+.pagina-proveedores .form-container input {
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  width: 200px; /* Un ancho fijo para ordenar */
+}
+.pagina-proveedores .form-container button {
+  padding: 8px 15px;
+  background-color: #28a745; /* Verde */
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  height: 36px;
+}
+
+/* --- Estilos de la Tabla --- */
+.proveedores-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  font-size: 14px; /* Un poco más pequeño para que quepa */
+}
+.proveedores-table th,
+.proveedores-table td {
+  border: 1px solid #ddd;
+  padding: 10px; /* Un poco menos de padding */
+  text-align: left;
+  vertical-align: middle;
+}
+.proveedores-table th {
+  background-color: #f4f4f4;
+  font-weight: 600;
+}
+.proveedores-table tr:nth-child(even) {
+  background-color: #f9f9f9;
+}
+
+/* --- Celda de Acciones --- */
+.acciones-cell {
+  width: 150px; /* Un poco más angosto */
+  text-align: center;
+}
+.acciones-cell button {
+  margin: 0 5px;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  color: white;
+}
+.btn-editar { background-color: #007bff; }
+.btn-borrar { background-color: #dc3545; }
+
+/* --- Fila de Edición --- */
+.edit-row {
+  background-color: #fffde7 !important;
+}
+.edit-row input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #aaa;
+  border-radius: 4px;
+  box-sizing: border-box;
+  font-size: 14px;
+}
+.edit-row .acciones-cell {
+  text-align: center;
+}
+.btn-guardar { background-color: #28a745; }
+.btn-cancelar { background-color: #6c757d; }

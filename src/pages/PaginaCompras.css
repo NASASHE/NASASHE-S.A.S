@@ -1,0 +1,160 @@
+/* src/pages/PaginaCompras.css */
+
+.pagina-compras h1 {
+  font-weight: 300;
+  border-bottom: 2px solid #dc3545;
+  padding-bottom: 10px;
+}
+.pagina-compras h1 + div {
+  text-align: center;
+  font-size: 18px;
+  margin-bottom: 10px;
+}
+
+.layout-compras {
+  display: flex;
+  gap: 20px;
+}
+
+/* Columna izquierda */
+.formulario-compra {
+  flex: 1;
+  background-color: #f9f9f9;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 20px;
+}
+.formulario-compra h2 {
+  margin-top: 0;
+}
+.form-grupo {
+  margin-bottom: 15px;
+}
+.form-grupo label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: 600;
+}
+.form-grupo input,
+.form-grupo select {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  box-sizing: border-box;
+}
+
+.imagen-preview-container {
+  width: 100%;
+  height: 150px;
+  background-color: #e9ecef;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  margin-top: 10px;
+  margin-bottom: 15px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+}
+.imagen-preview-container img {
+  height: 100%;
+  width: 100%;
+  object-fit: contain;
+}
+
+.btn-anadir-item {
+  width: 100%;
+  padding: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  background-color: #28a745;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-top: 10px;
+}
+.btn-anadir-item:disabled {
+  background-color: #ccc;
+}
+
+/* Columna derecha */
+.pre-factura {
+  flex: 1.5;
+  padding: 20px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background-color: #fff;
+}
+.pre-factura h2 {
+  margin-top: 0;
+}
+.pre-factura-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 15px;
+}
+.pre-factura-tabla th,
+.pre-factura-tabla td {
+  border-bottom: 1px solid #eee;
+  padding: 10px;
+  text-align: left;
+  vertical-align: middle; /* Centra botones */
+}
+.pre-factura-tabla th {
+  background-color: #f4f4f4;
+}
+
+/* 1. ¡NUEVOS ESTILOS! Para los botones de la tabla */
+.prefactura-acciones button {
+  padding: 4px 8px;
+  font-size: 12px;
+  margin-right: 5px;
+  border: none;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+}
+.btn-pre-editar { background-color: #007bff; }
+.btn-pre-borrar { background-color: #dc3545; }
+.btn-pre-editar:disabled { background-color: #ccc; }
+.btn-pre-borrar:disabled { background-color: #ccc; }
+
+
+.total-compra {
+  margin-top: 20px;
+  text-align: right;
+  font-size: 24px;
+  font-weight: bold;
+}
+
+.botones-accion button,
+.botones-accion a {
+  display: block;
+  width: 100%;
+  padding: 15px;
+  font-size: 18px;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-top: 10px;
+  box-sizing: border-box;
+}
+.btn-guardar-compra { background-color: #dc3545; }
+.btn-guardar-compra:disabled { background-color: #ccc; }
+.btn-imprimir-ticket { background-color: #007bff; text-decoration: none; text-align: center; }
+.btn-imprimir-ticket:hover { background-color: #0056b3; }
+.btn-descargar-ticket { background-color: #17a2b8; }
+.btn-descargar-ticket:hover { background-color: #138496; }
+.btn-nueva-compra { background-color: #6c757d; }
+
+.compra-exitosa {
+  text-align: center;
+  font-size: 18px;
+  font-weight: bold;
+  color: #28a745;
+  margin-top: 15px;
+
+}
