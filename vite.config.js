@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: process.env.GITHUB_PAGES_BASE ?? '/NASASHE-SAS/dist/',
+  base: process.env.GITHUB_PAGES_BASE ?? '/NASASHE-SAS/',
   plugins: [react()],
   // Permite que Vite resuelva los paquetes que exponen la condición "tauri",
   // necesaria para los plugins oficiales de Tauri cuando la app corre en el
