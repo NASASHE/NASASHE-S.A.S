@@ -1,24 +1,27 @@
-# React + Vite
+# NASASHE S.A.S
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Aplicación React + Vite conectada a Firebase y empaquetada originalmente como app instalable. Este repositorio ahora está listo para publicarse en GitHub Pages y servir el front-end desde la web.
 
-Currently, two official plugins are available:
+## Scripts disponibles
+- `npm run dev`: modo desarrollo con Vite.
+- `npm run build`: genera el paquete de producción.
+- `npm run preview`: sirve localmente la build.
+- `npm run lint`: ejecuta ESLint.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Despliegue en GitHub Pages
+- Vite está configurado con `base` apuntando al nombre del repositorio (`/NASASHE-SAS/`). Si usas otro nombre, ajusta `GITHUB_PAGES_BASE` o edita `vite.config.js`.
+- `BrowserRouter` usa `import.meta.env.BASE_URL` como `basename` para que las rutas funcionen bajo el subdirectorio de Pages.
+- Después de cada build se copia `index.html` a `404.html` para que el enrutado del lado del cliente funcione en GitHub Pages.
+- El flujo de trabajo `.github/workflows/deploy.yml` construye el sitio y publica el artefacto en Pages al hacer push a `main` o cuando se ejecuta manualmente.
 
-## React Compiler
+### Pasos para activar Pages
+1. Haz push de los cambios a la rama `main` para que se ejecute el workflow.
+2. En **Settings > Pages**, selecciona **GitHub Actions** como fuente.
+3. Si tu repositorio tiene otro nombre o deseas servir desde la raíz del dominio, ajusta la variable `GITHUB_PAGES_BASE` en el workflow antes de desplegar.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
-
-## GitHub Pages
-
-This repository now includes a GitHub Pages workflow that publishes the contents of the `public/` directory. To enable it:
-
-1. Push changes to the `main` branch so the workflow can run.
-2. In the repository settings, enable GitHub Pages using the **GitHub Actions** source.
-3. Customize `public/index.html` with any information or interface you want to display in the hosted page.
+### Construcción local
+```bash
+npm ci
+npm run build
+```
+Esto generará la carpeta `dist/` con el contenido listo para GitHub Pages.
