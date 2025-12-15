@@ -434,7 +434,7 @@ function PaginaVentas() {
       <div style={{ maxWidth: '1100px', margin: '0 auto 14px auto' }}>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
           <label style={{ fontWeight: 600 }}>
-            Jalar remisión pendiente:
+            Extraer de remisión pendiente:
             <select
               value={remisionSeleccionadaId}
               onChange={handleSeleccionarRemision}
