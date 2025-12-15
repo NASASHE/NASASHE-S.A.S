@@ -8,6 +8,8 @@ import { collection, doc, getDocs, runTransaction, Timestamp } from 'firebase/fi
 import { db } from '../firebase';
 import { useCaja } from '../context/CajaContext';
 
+const BASE = import.meta.env.BASE_URL;
+
 const formatConsecutivo = (numero) => `REM-${String(numero).padStart(6, '0')}`;
 
 const toNumber = (valor) => {
@@ -200,7 +202,9 @@ function PaginaRemisiones() {
     let cursorY = margin;
 
     try {
-      const logoData = await cargarImagenComoBase64(encodeURI('/logo con fondo.png'));
+      // ✅ CORREGIDO para GitHub Pages
+      const logoPath = encodeURI(`${BASE}logo con fondo.png`);
+      const logoData = await cargarImagenComoBase64(logoPath);
       doc.addImage(logoData, 'PNG', margin, cursorY, 40, 20);
     } catch (error) {
       console.warn('No se pudo cargar el logo para el PDF:', error);
@@ -405,7 +409,13 @@ function PaginaRemisiones() {
           <p>Genera y guarda remisiones con consecutivo y descarga el PDF listo para impresión.</p>
           <p className="remisiones-consecutivo">Próximo consecutivo: <strong>{formatConsecutivo(siguienteNumeroRemision)}</strong></p>
         </div>
-        <img src="/logo con fondo.png" alt="Logo Nasashe" className="remisiones-logo" />
+
+        {/* ✅ CORREGIDO para GitHub Pages */}
+        <img
+          src={`${BASE}logo con fondo.png`}
+          alt="Logo Nasashe"
+          className="remisiones-logo"
+        />
       </div>
 
       <section className="remisiones-panel">
