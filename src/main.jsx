@@ -1,25 +1,20 @@
 // src/main.jsx
 
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-import App from './App.jsx'
-import './index.css'
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App.jsx';
+import './index.css';
 
-import { BrowserRouter } from 'react-router-dom';
-
-// 1. ¡Importamos nuestro nuevo Proveedor de Contexto!
+import { HashRouter } from 'react-router-dom';
 import { CajaProvider } from './context/CajaContext';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    {/* 2. Envolvemos TODA la aplicación (incluyendo el Router)
-           con el CajaProvider. Ahora CUALQUIER página
-           podrá acceder al estado de la "Base".
-    */}
     <CajaProvider>
-      <BrowserRouter basename="/NASASHE-SAS">
+      {/* HashRouter funciona perfecto en GitHub Pages + Tauri */}
+      <HashRouter>
         <App />
-      </BrowserRouter>
+      </HashRouter>
     </CajaProvider>
-  </React.StrictMode>,
-)
+  </React.StrictMode>
+);

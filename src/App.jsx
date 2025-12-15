@@ -1,6 +1,6 @@
 // src/App.jsx
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
 
 import Header from './components/Header';
 import Dashboard from './pages/Dashboard';
@@ -20,35 +20,31 @@ import PaginaRemisiones from './pages/PaginaRemisiones';
 
 import PaginaImpresion from './pages/PaginaImpresion';
 
-import { CajaProvider } from './context/CajaContext';
-
 function App() {
   return (
-    <CajaProvider>
-      <BrowserRouter basename={import.meta.env.BASE_URL}>
-        <Header />
+    <>
+      <Header />
 
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
+      <Routes>
+        <Route path="/" element={<Dashboard />} />
 
-          <Route path="/compras" element={<PaginaCompras />} />
-          <Route path="/gastos" element={<PaginaGastos />} />
-          <Route path="/ventas" element={<PaginaVentas />} />
-          <Route path="/ventas-menores" element={<PaginaVentasMenores />} />
+        <Route path="/compras" element={<PaginaCompras />} />
+        <Route path="/gastos" element={<PaginaGastos />} />
+        <Route path="/ventas" element={<PaginaVentas />} />
+        <Route path="/ventas-menores" element={<PaginaVentasMenores />} />
 
-          <Route path="/articulos" element={<PaginaArticulos />} />
-          <Route path="/proveedores" element={<PaginaProveedores />} />
-          <Route path="/usuarios" element={<PaginaUsuarios />} />
-          <Route path="/configuracion" element={<PaginaConfiguracion />} />
+        <Route path="/articulos" element={<PaginaArticulos />} />
+        <Route path="/proveedores" element={<PaginaProveedores />} />
+        <Route path="/usuarios" element={<PaginaUsuarios />} />
+        <Route path="/configuracion" element={<PaginaConfiguracion />} />
 
-          <Route path="/reportes" element={<PaginaReportes />} />
-          <Route path="/remisiones" element={<PaginaRemisiones />} />
+        <Route path="/reportes" element={<PaginaReportes />} />
+        <Route path="/remisiones" element={<PaginaRemisiones />} />
 
-          {/* Ventana de impresión (Tauri / Web) */}
-          <Route path="/imprimir" element={<PaginaImpresion />} />
-        </Routes>
-      </BrowserRouter>
-    </CajaProvider>
+        {/* Ventana de impresión (Tauri / Web) */}
+        <Route path="/imprimir" element={<PaginaImpresion />} />
+      </Routes>
+    </>
   );
 }
 
