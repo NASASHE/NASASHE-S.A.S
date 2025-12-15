@@ -332,6 +332,10 @@ function PaginaCompras() {
     }
   }
 
+  const printRemisionEnNavegador = (data) => {
+    imprimirTicketEnNavegador(generarTextoTicketRemision(data, userProfile), `Remisión ${data.consecutivo}`);
+  };
+  
   const handleImprimir = async () => {
     if (!compraReciente) return
 

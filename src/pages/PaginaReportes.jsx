@@ -18,7 +18,8 @@ import {
   generarTextoTicketCompra,
   generarTextoTicketVenta,
   generarTextoTicketVentaMenor,
-  generarTextoTicketGasto
+  generarTextoTicketGasto,
+  generarTextoTicketRemision // ✅ AÑADE ESTO
 } from '../utils/generarTickets';
 
 import jsPDF from 'jspdf';
@@ -370,7 +371,12 @@ function PaginaReportes() {
   const printGastoEnNavegador = (data) => {
     imprimirTicketEnNavegador(generarTextoTicketGasto(data, userProfile), `Comprobante ${data.consecutivo}`);
   };
-
+  const printRemisionEnNavegador = (data) => {
+    imprimirTicketEnNavegador(
+      generarTextoTicketRemision(data, userProfile),
+      `Remisión ${data.consecutivo}`
+    );
+  };
   const printInventarioEnNavegador = async (payload) => {
     const itemsParaImprimir = Array.isArray(payload?.items) && payload.items.length > 0
       ? payload.items
@@ -395,6 +401,7 @@ function PaginaReportes() {
         case 'ventaMenor': return printVentaMenorEnNavegador(datos);
         case 'gasto': return printGastoEnNavegador(datos);
         case 'inventario': return printInventarioEnNavegador(datos);
+        case 'remision': return printRemisionEnNavegador(datos); // ✅ AÑADIDO
         default: return;
       }
     };
@@ -882,7 +889,14 @@ function PaginaReportes() {
                       <td>{Array.isArray(remision.items) ? remision.items.length : 0}</td>
                       <td>
                         {/* Aquí podrías agregar reimpresión PDF si quieres */}
-                        <span>-</span>
+                        <td>
+                          <button
+                            onClick={() => prepararEImprimir('remision', remision)}
+                            className="btn-reimprimir"
+                          >
+                            Re-imprimir
+                          </button>
+                        </td>
                       </td>
                     </tr>
                   ))

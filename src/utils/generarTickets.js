@@ -196,3 +196,112 @@ export const generarTextoTicketGasto = (gastoData, usuario) => {
 
   return contenido;
 };
+
+// --- TICKET DE REMISIÓN ---
+export const generarTextoTicketRemision = (remisionData, usuario) => {
+  const fecha = remisionData?.fecha?.toDate
+    ? remisionData.fecha.toDate().toLocaleString('es-CO')
+    : (remisionData?.fecha instanceof Date
+        ? remisionData.fecha.toLocaleString('es-CO')
+        : new Date(remisionData?.fecha || Date.now()).toLocaleString('es-CO'));
+
+  const destinoNombre = (remisionData?.destino?.nombre || 'N/A').toString().trim();
+  const destinoNit = (remisionData?.destino?.nit || 'N/A').toString().trim();
+  const destinoDireccion = (remisionData?.destino?.direccion || 'N/A').toString().trim();
+
+  const conductorNombre = (remisionData?.conductor?.nombre || 'N/A').toString().trim();
+  const conductorCedula = (remisionData?.conductor?.cedula || 'N/A').toString().trim();
+  const conductorPlaca = (remisionData?.conductor?.placa || 'N/A').toString().trim();
+
+  const centrar = (texto, ancho) => {
+    const espacios = Math.max(0, Math.floor((ancho - texto.length) / 2));
+    return ' '.repeat(espacios) + texto;
+  };
+
+  const ancho = 45;
+
+  let contenido = centrar('REMISIÓN', ancho) + '\n';
+  contenido += centrar('RECICLADORA NASASHE S.A.S', ancho) + '\n';
+  contenido += centrar('901907763-3', ancho) + '\n';
+  contenido += centrar('Calle 98#9B-35', ancho) + '\n';
+  contenido += centrar('Barranquilla - Atlantico', ancho) + '\n';
+  contenido += centrar('605-000-0000', ancho) + '\n';
+  contenido += '-'.repeat(ancho) + '\n';
+
+  contenido += `Remisión: ${remisionData?.consecutivo || 'N/A'}\n`;
+  contenido += `Fecha: ${fecha}\n`;
+  contenido += `Creado por: ${remisionData?.creadoPor || usuario?.nombre || 'SISTEMA'}\n`;
+  contenido += '-'.repeat(ancho) + '\n';
+
+  contenido += `Destino: ${destinoNombre}\n`;
+  contenido += `NIT: ${destinoNit}\n`;
+  contenido += `Dir: ${destinoDireccion}\n`;
+  contenido += '-'.repeat(ancho) + '\n';
+
+  contenido += `Conductor: ${conductorNombre}\n`;
+  contenido += `Cédula: ${conductorCedula}\n`;
+  contenido += `Placa: ${conductorPlaca}\n`;
+  contenido += '-'.repeat(ancho) + '\n';
+
+  contenido += 'Material'.padEnd(19) + 'Cant.'.padStart(6) + 'Prec.'.padStart(9) + 'Total'.padStart(11) + '\n';
+  contenido += '-'.repeat(ancho) + '\n';
+
+  const items = Array.isArray(remisionData?.items) ? remisionData.items : [];
+  let total = 0;
+
+  items.forEach((item) => {
+    const nombre = (item?.nombre || 'SIN NOMBRE');
+    const nombreCorto = nombre.length > 18 ? nombre.substring(0, 18) : nombre;
+
+    const cant = Number(item?.cantidad || 0);
+    const prec = Number(item?.precioCompra || item?.precio || 0);
+    const sub = Number(item?.subtotal || (cant * prec));
+
+    total += sub;
+
+    contenido += nombreCorto.padEnd(19)
+      + cant.toFixed(2).padStart(6)
+      + prec.toLocaleString('es-CO').padStart(9)
+      + sub.toLocaleString('es-CO').padStart(11)
+      + '\n';
+  });
+
+  contenido += '-'.repeat(ancho) + '\n';
+  const anchoTotal = ancho - 10;
+  contenido += 'Total:'.padEnd(10) + `${total.toLocaleString('es-CO')}`.padStart(anchoTotal) + '\n';
+  contenido += '-'.repeat(ancho) + '\n';
+  contenido += centrar('¡ Gracias !', ancho) + '\n';
+
+  return contenido;
+};
+
+
+// --- TICKET INVENTARIO (para usar también en /imprimir) ---
+export const generarTextoTicketInventario = (inventario, usuario) => {
+  const fecha = new Date().toLocaleString('es-CO');
+  const centrar = (texto, ancho) => {
+    const espacios = Math.max(0, Math.floor((ancho - texto.length) / 2));
+    return ' '.repeat(espacios) + texto;
+  };
+  const ancho = 45;
+
+  let contenido = centrar('REPORTE DE INVENTARIO', ancho) + '\n';
+  contenido += centrar('RECICLADORA NASASHE S.A.S', ancho) + '\n';
+  contenido += '-'.repeat(ancho) + '\n';
+  contenido += `Fecha: ${fecha}\n`;
+  contenido += `Generado por: ${usuario?.nombre || 'SISTEMA'}\n`;
+  contenido += '-'.repeat(ancho) + '\n';
+  contenido += 'Material'.padEnd(30) + 'Stock'.padStart(15) + '\n';
+  contenido += '-'.repeat(ancho) + '\n';
+
+  (inventario || []).forEach(item => {
+    const nombre = (item.nombre || '').length > 29 ? item.nombre.substring(0, 29) : (item.nombre || 'SIN NOMBRE');
+    const stock = (Number(item.stock) || 0).toFixed(2);
+    contenido += nombre.padEnd(30) + stock.padStart(15) + '\n';
+  });
+
+  contenido += '-'.repeat(ancho) + '\n';
+  contenido += `Total de Artículos: ${(inventario || []).length}\n`;
+  contenido += '-'.repeat(ancho) + '\n';
+  return contenido;
+};

@@ -1,23 +1,26 @@
 // src/pages/PaginaImpresion.jsx
 import React, { useEffect, useState } from 'react';
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
+
+import '../components/TicketCompra.css';
+
 import {
   generarTextoTicketCompra,
   generarTextoTicketVenta,
   generarTextoTicketVentaMenor,
-  generarTextoTicketGasto
+  generarTextoTicketGasto,
+  generarTextoTicketRemision,
+  generarTextoTicketInventario
 } from '../utils/generarTickets';
 
-import '../components/TicketCompra.css';
-
-const isTauriEnvironment = () => typeof window !== 'undefined' && Boolean(window.__TAURI_INTERNALS__);
+const isTauriEnvironment = () =>
+  typeof window !== 'undefined' && (Boolean(window.__TAURI__) || Boolean(window.__TAURI_INTERNALS__));
 
 const revivirFechas = (key, value) => {
   if (typeof value === 'object' && value !== null && 'seconds' in value && 'nanoseconds' in value) {
     return new Date(value.seconds * 1000 + value.nanoseconds / 1000000);
   }
-  if (key === 'fecha' && typeof value === 'string' && value.includes('T') && value.endsWith('Z')) {
-    return new Date(value);
-  }
+  if (key === 'fecha' && typeof value === 'string' && value.includes('T')) return new Date(value);
   return value;
 };
 
@@ -25,13 +28,13 @@ function PaginaImpresion() {
   const [ticket, setTicket] = useState(null);
 
   const closePrintWindow = async () => {
-    if (!isTauriEnvironment()) {
-      window.close();
-      return;
-    }
     try {
-      const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
-      getCurrentWebviewWindow().close();
+      if (isTauriEnvironment()) {
+        const currentWindow = getCurrentWebviewWindow();
+        currentWindow.close();
+      } else {
+        window.close();
+      }
     } catch (e) {
       window.close();
     }
@@ -57,15 +60,34 @@ function PaginaImpresion() {
     }
   }, []);
 
+  const buildTexto = () => {
+    if (!ticket) return 'Cargando...';
+    const { type, data, user } = ticket;
+
+    switch (type) {
+      case 'compra': return generarTextoTicketCompra(data, user);
+      case 'venta': return generarTextoTicketVenta(data, user);
+      case 'ventaMenor': return generarTextoTicketVentaMenor(data, user);
+      case 'gasto': return generarTextoTicketGasto(data, user);
+      case 'remision': return generarTextoTicketRemision(data, user);
+
+      case 'inventario': {
+        const items = Array.isArray(data?.items) ? data.items : [];
+        return generarTextoTicketInventario(items, user);
+      }
+
+      default:
+        return `Error: Tipo de ticket no reconocido (${type})`;
+    }
+  };
+
   useEffect(() => {
     if (!ticket) return;
 
     const timer = setTimeout(() => {
-      const handleAfterPrint = () => {
-        try { closePrintWindow(); } catch { /* noop */ }
-      };
-
+      const handleAfterPrint = () => closePrintWindow();
       window.onafterprint = handleAfterPrint;
+
       window.print();
       window.onfocus = () => setTimeout(handleAfterPrint, 500);
     }, 100);
@@ -73,20 +95,9 @@ function PaginaImpresion() {
     return () => clearTimeout(timer);
   }, [ticket]);
 
-  if (!ticket) {
-    return <div style={{ fontFamily: 'monospace', padding: 10 }}>Cargando ticket...</div>;
-  }
-
-  let texto = '';
-  if (ticket.type === 'compra') texto = generarTextoTicketCompra(ticket.data, ticket.user);
-  else if (ticket.type === 'venta') texto = generarTextoTicketVenta(ticket.data, ticket.user);
-  else if (ticket.type === 'ventaMenor') texto = generarTextoTicketVentaMenor(ticket.data, ticket.user);
-  else if (ticket.type === 'gasto') texto = generarTextoTicketGasto(ticket.data, ticket.user);
-  else texto = 'Error: Tipo de ticket no reconocido.';
-
   return (
-    <div style={{ fontFamily: 'Courier New, Courier, monospace', fontSize: 10, padding: 8 }}>
-      <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{texto}</pre>
+    <div style={{ fontFamily: 'Courier New, monospace', fontSize: '10px', padding: '8px' }}>
+      <pre style={{ whiteSpace: 'pre-wrap' }}>{buildTexto()}</pre>
     </div>
   );
 }
