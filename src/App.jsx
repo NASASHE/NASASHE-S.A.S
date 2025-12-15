@@ -42,9 +42,10 @@ function App() {
         <Route path="/reportes" element={<PaginaReportes />} />
         <Route path="/remisiones" element={<PaginaRemisiones />} />
 
-        {/* Ventana de impresión (Tauri / Web) */}
         <Route path="/imprimir" element={<PaginaImpresion />} />
       </Routes>
+
+      <Footer />
     </>
   );
 }
