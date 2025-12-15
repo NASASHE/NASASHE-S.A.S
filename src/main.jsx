@@ -17,7 +17,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
            podrá acceder al estado de la "Base".
     */}
     <CajaProvider>
-      <BrowserRouter basename={(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}>
+      <BrowserRouter basename="/NASASHE-SAS">
         <App />
       </BrowserRouter>
     </CajaProvider>
