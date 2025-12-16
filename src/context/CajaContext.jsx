@@ -3,13 +3,13 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { auth, db } from '../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { 
-  doc, 
-  getDoc, 
-  updateDoc, 
-  runTransaction, 
-  onSnapshot // Importamos todo lo necesario
-} from 'firebase/firestore'; 
+import {
+  doc,
+  getDoc,
+  updateDoc,
+  runTransaction,
+  onSnapshot
+} from 'firebase/firestore';
 
 const CajaContext = createContext();
 
@@ -22,73 +22,83 @@ const getInitialBaseEstablecida = () => {
 };
 
 export function CajaProvider({ children }) {
-  
+
   const [base, setBase] = useState(0);
   const [baseGuardada, setBaseGuardada] = useState(0);
-  const [consecutivos, setConsecutivos] = useState(0); // El nuevo estado
+  const [consecutivos, setConsecutivos] = useState(0);
   const [consecutivosData, setConsecutivosData] = useState({});
   const [baseEstablecida, setBaseEstablecida] = useState(getInitialBaseEstablecida);
   const [currentUser, setCurrentUser] = useState(null);
+
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [userProfile, setUserProfile] = useState(null);
 
-  // --- ESTE ES EL useEffect CORREGIDO ---
   useEffect(() => {
-    
-    let unsubscribeCaja = () => {}; // Funciones 'dummy' para limpiar
+
+    let unsubscribeCaja = () => {};
     let unsubscribeConsec = () => {};
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
-      
+
       // Limpiamos listeners anteriores cada vez que el usuario cambia
       unsubscribeCaja();
       unsubscribeConsec();
-      
+
       if (user) {
         try {
-          // 1. Cargar perfil de usuario (esto solo se hace una vez)
+          // 1) Cargar perfil
           const userDocRef = doc(db, "usuarios", user.uid);
           const userDocSnap = await getDoc(userDocRef);
+
           if (userDocSnap.exists()) {
             setUserProfile(userDocSnap.data());
           } else {
             console.error("No se encontró el perfil de usuario en Firestore.");
+            setUserProfile(null);
           }
 
-          // 2. Listener para la CAJA (se actualiza en tiempo real)
-          unsubscribeCaja = onSnapshot(cajaDocRef, (docSnap) => {
-            if (docSnap.exists()) {
-              const baseDeFirebase = docSnap.data().baseActual;
-              setBaseGuardada(baseDeFirebase);
-              if (getInitialBaseEstablecida()) {
-                setBase(baseDeFirebase); // Actualiza la base activa
-              }
-            } else {
-              alert("Error de Configuración: No se encontró el documento 'caja'.");
-            }
-          }, (error) => {
-            console.error("Error al escuchar la caja: ", error);
-          });
+          // 2) Listener CAJA
+          unsubscribeCaja = onSnapshot(
+            cajaDocRef,
+            (docSnap) => {
+              if (docSnap.exists()) {
+                const baseDeFirebase = docSnap.data().baseActual ?? 0;
+                setBaseGuardada(baseDeFirebase);
 
-          // 3. Listener para los CONSECUTIVOS (se actualiza en tiempo real)
-          unsubscribeConsec = onSnapshot(consecDocRef, (docSnap) => {
-            if (docSnap.exists()) {
-              const data = docSnap.data();
-              setConsecutivos(data.compras ?? 0); // Guardamos el número
-              setConsecutivosData(data);
-              console.log("¡Consecutivos actualizados (onSnapshot)!: ", data.compras);
-            } else {
-              alert("Error de Configuración: No se encontró el documento 'consecutivos'.");
+                if (getInitialBaseEstablecida()) {
+                  setBase(baseDeFirebase);
+                }
+              } else {
+                alert("Error de Configuración: No se encontró el documento 'caja'.");
+              }
+            },
+            (error) => {
+              console.error("Error al escuchar la caja: ", error);
             }
-          }, (error) => {
-            console.error("Error al escuchar consecutivos: ", error);
-          });
+          );
+
+          // 3) Listener CONSECUTIVOS
+          unsubscribeConsec = onSnapshot(
+            consecDocRef,
+            (docSnap) => {
+              if (docSnap.exists()) {
+                const data = docSnap.data();
+                setConsecutivos(data.compras ?? 0);
+                setConsecutivosData(data);
+              } else {
+                alert("Error de Configuración: No se encontró el documento 'consecutivos'.");
+              }
+            },
+            (error) => {
+              console.error("Error al escuchar consecutivos: ", error);
+            }
+          );
 
         } catch (error) {
-           console.error("Error al cargar datos iniciales: ", error);
+          console.error("Error al cargar datos iniciales: ", error);
         }
-        
+
       } else {
         // Limpieza si el usuario cierra sesión
         setBase(0);
@@ -97,20 +107,18 @@ export function CajaProvider({ children }) {
         setUserProfile(null);
         sessionStorage.removeItem('baseEstablecida');
       }
-      
-      // ¡¡LA LÍNEA CLAVE!! Se llama al final
-      setLoadingAuth(false); 
+
+      setLoadingAuth(false);
     });
-    
-    // El 'return' del useEffect limpia todo cuando el Contexto se desmonta
+
     return () => {
       unsubscribeAuth();
       unsubscribeCaja();
       unsubscribeConsec();
     };
-  }, []); // El array vacío [] es correcto
+  }, []);
 
-  // --- Tus otras funciones (establecerBase, etc.) están perfectas ---
+  // --- Funciones ---
   const establecerBase = async (monto) => {
     const montoNum = Number(monto);
     try {
@@ -134,14 +142,10 @@ export function CajaProvider({ children }) {
     try {
       await runTransaction(db, async (transaction) => {
         const cajaSnapshot = await transaction.get(cajaDocRef);
-        if (!cajaSnapshot.exists()) {
-          throw new Error("No se encontró la configuración de caja.");
-        }
+        if (!cajaSnapshot.exists()) throw new Error("No se encontró la configuración de caja.");
 
         const baseActual = cajaSnapshot.data().baseActual || 0;
-        if (montoNum > baseActual) {
-          throw new Error("El monto a restar supera la base actual en caja.");
-        }
+        if (montoNum > baseActual) throw new Error("El monto a restar supera la base actual en caja.");
 
         const nuevaBase = baseActual - montoNum;
         transaction.update(cajaDocRef, { baseActual: nuevaBase });
@@ -163,9 +167,7 @@ export function CajaProvider({ children }) {
     try {
       await runTransaction(db, async (transaction) => {
         const cajaSnapshot = await transaction.get(cajaDocRef);
-        if (!cajaSnapshot.exists()) {
-          throw new Error("No se encontró la configuración de caja.");
-        }
+        if (!cajaSnapshot.exists()) throw new Error("No se encontró la configuración de caja.");
 
         const baseActual = cajaSnapshot.data().baseActual || 0;
         const nuevaBase = baseActual + montoNum;
@@ -178,7 +180,7 @@ export function CajaProvider({ children }) {
     }
   };
 
-  // --- Objeto 'value' actualizado ---
+  // ✅ VALUE (CORREGIDO): ahora sí exponemos setCurrentUser
   const value = {
     base,
     baseGuardada,
@@ -186,17 +188,21 @@ export function CajaProvider({ children }) {
     establecerBase,
     restarDeLaBase,
     sumarALaBase,
+
     currentUser,
+    setCurrentUser,     // ✅ AÑADIDO
+
     loadingAuth,
     userProfile,
     setBase,
-    consecutivos, // <-- Exponemos los consecutivos
-    consecutivosData
+
+    consecutivos,
+    consecutivosData,
   };
 
-  // Esta parte está bien
+  // ✅ Mejor que retornar null (pantalla blanca)
   if (loadingAuth) {
-    return null;
+    return <div style={{ padding: 20 }}>Cargando...</div>;
   }
 
   return (
@@ -212,5 +218,4 @@ export function useCaja() {
     throw new Error('useCaja debe ser usado dentro de un CajaProvider');
   }
   return context;
-
 }
