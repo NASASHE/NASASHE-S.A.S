@@ -1,31 +1,32 @@
 // src/App.jsx
 
-import { Routes, Route } from "react-router-dom";
-import MainLayout from "./components/MainLayout";
+import './App.css';
+import { Routes, Route } from 'react-router-dom';
+import MainLayout from './components/MainLayout';
 
 // Páginas
-import Dashboard from "./pages/Dashboard";
-import PaginaLogin from "./pages/PaginaLogin";
-import PaginaArticulos from "./pages/PaginaArticulos";
-import PaginaProveedores from "./pages/PaginaProveedores";
-import PaginaCompras from "./pages/PaginaCompras";
-import PaginaVentas from "./pages/PaginaVentas";
-import PaginaGastos from "./pages/PaginaGastos";
-import PaginaReportes from "./pages/PaginaReportes";
-import PaginaVentasMenores from "./pages/PaginaVentasMenores";
-import PaginaUsuarios from "./pages/PaginaUsuarios";
-import PaginaRemisiones from "./pages/PaginaRemisiones";
-import PaginaConfiguracion from "./pages/PaginaConfiguracion";
-import PaginaImpresion from "./pages/PaginaImpresion";
+import Dashboard from './pages/Dashboard';
+import PaginaArticulos from './pages/PaginaArticulos';
+import PaginaProveedores from './pages/PaginaProveedores';
+import PaginaCompras from './pages/PaginaCompras';
+import PaginaVentas from './pages/PaginaVentas';
+import PaginaGastos from './pages/PaginaGastos';
+import PaginaReportes from './pages/PaginaReportes';
+import PaginaLogin from './pages/PaginaLogin';
+import PaginaVentasMenores from './pages/PaginaVentasMenores';
+import PaginaUsuarios from './pages/PaginaUsuarios';
+import PaginaRemisiones from './pages/PaginaRemisiones';
+import PaginaImpresion from './pages/PaginaImpresion';
+import PaginaConfiguracion from './pages/PaginaConfiguracion';
 
 function App() {
   return (
     <Routes>
-
-      {/* 🔓 RUTA PÚBLICA */}
+      {/* ✅ RUTAS PÚBLICAS */}
       <Route path="/login" element={<PaginaLogin />} />
+      <Route path="/imprimir" element={<PaginaImpresion />} />
 
-      {/* 🔒 RUTAS PROTEGIDAS */}
+      {/* ✅ RUTAS PRIVADAS (PROTEGIDAS) */}
       <Route element={<MainLayout />}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/articulos" element={<PaginaArticulos />} />
@@ -39,10 +40,6 @@ function App() {
         <Route path="/remisiones" element={<PaginaRemisiones />} />
         <Route path="/configuracion" element={<PaginaConfiguracion />} />
       </Route>
-
-      {/* Ruta auxiliar */}
-      <Route path="/imprimir" element={<PaginaImpresion />} />
-
     </Routes>
   );
 }
