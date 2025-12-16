@@ -50,13 +50,20 @@ function Footer() {
       <div className="footer-user">
         {/* 3. Mostramos el 'nombre' del perfil */}
         Usuario: **{nombreUsuario}** |
-        <a
-          href="#"
-          onClick={handleLogout}
-          style={{color: 'black', marginLeft: '40px', textDecoration: 'underline', cursor: 'pointer'}}
-        >
-          Salir
-        </a>
+          <button
+            type="button"
+            onClick={handleLogout}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'black',
+              marginLeft: '40px',
+              textDecoration: 'underline',
+              cursor: 'pointer'
+            }}
+          >
+            Salir
+          </button>
       </div>
 
       <div className="footer-base">
