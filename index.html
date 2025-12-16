@@ -8,6 +8,16 @@
   </head>
   <body>
     <div id="root"></div>
+
+    <script>
+      // Recupera la ruta que guardó 404.html y la restaura sin recargar
+      const redirectPath = sessionStorage.getItem("redirectPath");
+      if (redirectPath) {
+        sessionStorage.removeItem("redirectPath");
+        history.replaceState(null, "", redirectPath);
+      }
+    </script>
+
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

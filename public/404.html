@@ -1,15 +1,21 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html>
   <head>
-    <meta charset="UTF-8" />
+    <meta charset="utf-8" />
     <title>Nasashe s.a.s</title>
     <script>
+      // SPA redirect for GitHub Pages (preserva la ruta)
       var repo = "/NASASHE-SAS";
       var path = window.location.pathname;
 
-      if (path.startsWith(repo)) {
-        window.location.replace(repo + "/index.html");
-      }
+      // Quita el repo del inicio: /NASASHE-SAS/login -> /login
+      var route = path.startsWith(repo) ? path.slice(repo.length) : path;
+
+      // Guarda la ruta para recuperarla después
+      sessionStorage.setItem("redirectPath", route + window.location.search);
+
+      // Redirige al index real de la app
+      window.location.replace(repo + "/");
     </script>
   </head>
   <body>
