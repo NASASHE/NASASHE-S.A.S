@@ -2,11 +2,21 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import './PaginaRemisiones.css';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import { collection, doc, getDocs, runTransaction, Timestamp } from 'firebase/firestore';
-import { db } from '../firebase';
+
+import {
+  collection,
+  doc,
+  getDocs,
+  runTransaction,
+  Timestamp,
+  updateDoc
+} from 'firebase/firestore';
+
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+
+import { db, storage } from '../firebase';
 import { useCaja } from '../context/CajaContext';
+import { generarPdfRemision } from '../utils/remisionPdf';
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -21,17 +31,6 @@ const generarId = () =>
   (typeof crypto !== 'undefined' && crypto.randomUUID
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(16).slice(2)}`);
-
-const cargarImagenComoBase64 = async (url) => {
-  const response = await fetch(url);
-  const blob = await response.blob();
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-};
 
 function PaginaRemisiones() {
   const { userProfile, consecutivosData } = useCaja();
@@ -61,8 +60,11 @@ function PaginaRemisiones() {
   const [items, setItems] = useState([]);
   const [observaciones, setObservaciones] = useState('');
   const [guardando, setGuardando] = useState(false);
+
+  // Para imprimir/descargar el último PDF generado (en memoria)
   const [ultimoPdf, setUltimoPdf] = useState(null);
   const [ultimoConsecutivo, setUltimoConsecutivo] = useState('');
+  const [ultimoPdfUrl, setUltimoPdfUrl] = useState(''); // ✅ NUEVO: URL guardada en Storage
 
   const siguienteNumeroRemision = useMemo(
     () => (consecutivosData?.remisiones ?? 0) + 1,
@@ -162,7 +164,7 @@ function PaginaRemisiones() {
       return;
     }
 
-    // ✅ IMPORTANTE: aunque NO descontamos stock aquí, sí validamos para no crear remisiones imposibles
+    // ✅ Validación stock (sin descontar)
     if (cantidad > (Number(articulo.stock) || 0)) {
       alert(`La cantidad supera el stock disponible (${Number(articulo.stock) || 0}).`);
       return;
@@ -206,124 +208,23 @@ function PaginaRemisiones() {
     return true;
   };
 
-  const generarPdf = async (remisionData) => {
-    const pdf = new jsPDF({ unit: 'mm', format: 'letter' });
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const margin = 12;
-    let cursorY = margin;
-
-    // Logo
-    try {
-      const logoPath = encodeURI(`${BASE}logo con fondo.png`);
-      const logoData = await cargarImagenComoBase64(logoPath);
-      pdf.addImage(logoData, 'PNG', margin, cursorY, 40, 20);
-    } catch (error) {
-      console.warn('No se pudo cargar el logo para el PDF:', error);
-    }
-
-    pdf.setFontSize(16);
-    pdf.text('NASASHE S.A.S.', pageWidth / 2, cursorY + 6, { align: 'center' });
-    pdf.setFontSize(10);
-    pdf.text('901.907.763-3', pageWidth / 2, cursorY + 12, { align: 'center' });
-    pdf.text('Calle 98 9B 35', pageWidth / 2, cursorY + 18, { align: 'center' });
-    pdf.text('Tel: 3227377140', pageWidth / 2, cursorY + 24, { align: 'center' });
-
-    pdf.setFontSize(14);
-    pdf.text('REMISIÓN', pageWidth - margin, cursorY + 10, { align: 'right' });
-    pdf.setFontSize(12);
-    pdf.text(remisionData.consecutivo, pageWidth - margin, cursorY + 18, { align: 'right' });
-
-    cursorY += 30;
-    pdf.setFontSize(11);
-    pdf.text(`Destino: ${remisionData.destino.nombre}`, margin, cursorY);
-    pdf.text(`Dirección: ${remisionData.destino.direccion || 'N/D'}`, pageWidth / 2, cursorY);
-
-    cursorY += 6;
-    pdf.text(`NIT: ${remisionData.destino.nit || 'N/D'}`, margin, cursorY);
-    pdf.text(`Teléfono: ${remisionData.destino.telefono || 'N/D'}`, pageWidth / 2, cursorY);
-
-    cursorY += 10;
-    pdf.text(`Fecha emisión: ${new Date(remisionData.fecha.toDate()).toLocaleString('es-CO')}`, margin, cursorY);
-
-    cursorY += 6;
-    pdf.text(`Conductor: ${remisionData.conductor.nombre}`, margin, cursorY);
-    pdf.text(`Cédula: ${remisionData.conductor.cedula}`, pageWidth / 2, cursorY);
-
-    cursorY += 6;
-    pdf.text(`Dirección: ${remisionData.conductor.direccion || 'N/D'}`, margin, cursorY);
-
-    cursorY += 6;
-    pdf.text(`Vínculo: ${remisionData.conductor.vinculo}`, margin, cursorY);
-    pdf.text(`Placa: ${remisionData.conductor.placa}`, pageWidth / 2, cursorY);
-
-    cursorY += 6;
-    pdf.text(`Celular: ${remisionData.conductor.celular || 'N/D'}`, margin, cursorY);
-
-    cursorY += 6;
-    if (remisionData.observaciones) {
-      pdf.text(`Observaciones: ${remisionData.observaciones}`, margin, cursorY);
-      cursorY += 6;
-    }
-
-    autoTable(pdf, {
-      startY: cursorY + 4,
-      head: [['Ítem', 'Detalle del material', 'Cantidad (Kg)']],
-      body: remisionData.items.map((item, idx) => ([
-        String(idx + 1),
-        item.nombre,
-        Number(item.cantidad || 0).toLocaleString('es-CO')
-      ])),
-      styles: { fontSize: 10, cellPadding: 2 },
-      theme: 'grid',
-      headStyles: { fillColor: [26, 71, 77] },
-      tableWidth: 'auto',
-      columnStyles: {
-        0: { cellWidth: 20 },
-        1: { cellWidth: 120 },
-        2: { cellWidth: 30, halign: 'right' }
-      },
-      margin: { left: margin, right: margin }
+  const limpiarFormulario = () => {
+    setItems([]);
+    setObservaciones('');
+    setDestinoId('');
+    setDestinoInfo({ nombre: '', nit: '', direccion: '', telefono: '' });
+    setDatosConductor({
+      nombre: '',
+      cedula: '',
+      direccion: '',
+      vinculo: 'CONTRATISTA DE FLETE',
+      placa: '',
+      celular: ''
     });
-
-    // ----- Firmas -----
-    const finalY = pdf.lastAutoTable.finalY + 10;
-    pdf.line(margin, finalY, pageWidth - margin, finalY);
-
-    const colW = (pageWidth - margin * 2) / 3;
-
-    // ✅ Imagen de firma (quien diligencia) encima del texto
-    try {
-      const firmaPath = encodeURI(`${BASE}icons/Firma.jpg`);
-      const firmaData = await cargarImagenComoBase64(firmaPath);
-
-      const firmaX = margin + 4;
-      const firmaY = finalY + 1;
-      const firmaW = colW - 8;
-      const firmaH = 12; // ajusta si quieres más alta
-
-      pdf.addImage(firmaData, 'JPEG', firmaX, firmaY, firmaW, firmaH);
-    } catch (error) {
-      console.warn('No se pudo cargar Firma.jpg:', error);
-    }
-
-    // Textos debajo (dejando espacio para la imagen)
-    const labelY = finalY + 16;
-    pdf.setFontSize(10);
-    pdf.text('Firma y sello quien diligencia', margin + 6, labelY);
-    pdf.text('Firma Conductor', margin + colW + 20, labelY);
-    pdf.text('Firma cliente y/o Recibidor', margin + colW * 2 + 10, labelY);
-
-    // Paginación
-    const pageCount = pdf.getNumberOfPages();
-    for (let i = 1; i <= pageCount; i += 1) {
-      pdf.setPage(i);
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      pdf.text(`Página ${i} de ${pageCount}`, pageWidth - margin, pageHeight - 8, { align: 'right' });
-    }
-
-    return pdf;
+    setItemSeleccionado({ articuloId: '', cantidad: '', modoCantidad: 'manual' });
   };
 
+  // ✅ GUARDA REMISIÓN + GENERA PDF + SUBE A STORAGE + GUARDA pdfUrl EN FIRESTORE
   const handleGuardar = async () => {
     if (!validarFormulario()) return;
 
@@ -334,6 +235,7 @@ function PaginaRemisiones() {
     try {
       const remisionRef = doc(collection(db, 'remisiones'));
       let remisionParaPdf = null;
+      let remisionDocId = null;
 
       await runTransaction(db, async (transaction) => {
         const consecRef = doc(db, 'configuracion', 'consecutivos');
@@ -358,8 +260,8 @@ function PaginaRemisiones() {
 
         const remisionData = {
           consecutivo: consecutivoStr,
-          estado: 'PENDIENTE',         // ✅ clave para jalar en ventas
-          stockDescontado: false,      // ✅ se vuelve true al facturar (venta)
+          estado: 'PENDIENTE',
+          stockDescontado: false,
           ventaId: null,
           fechaFacturacion: null,
           facturadoPor: null,
@@ -379,39 +281,57 @@ function PaginaRemisiones() {
           })),
           observaciones: observaciones || '',
           fecha: Timestamp.now(),
-          creadoPor: userProfile?.nombre || 'SISTEMA'
+          creadoPor: userProfile?.nombre || 'SISTEMA',
+
+          // ✅ se llenan después
+          pdfUrl: '',
+          pdfPath: '',
+          impresa: false,
+          impresaEn: null,
+          impresaPor: null
         };
 
         remisionParaPdf = remisionData;
+        remisionDocId = remisionRef.id;
 
         transaction.set(remisionRef, remisionData);
         transaction.update(consecRef, { remisiones: ultimoNum });
       });
 
-      const pdf = await generarPdf(remisionParaPdf);
+      // 1) Generar el PDF (Letter) con el mismo formato siempre
+      const pdf = await generarPdfRemision(remisionParaPdf);
 
       setUltimoPdf(pdf);
       setUltimoConsecutivo(remisionParaPdf.consecutivo);
 
-      // limpiar form
-      setItems([]);
-      setObservaciones('');
-      setDestinoId('');
-      setDestinoInfo({ nombre: '', nit: '', direccion: '', telefono: '' });
-      setDatosConductor({
-        nombre: '',
-        cedula: '',
-        direccion: '',
-        vinculo: 'CONTRATISTA DE FLETE',
-        placa: '',
-        celular: ''
-      });
-      setItemSeleccionado({ articuloId: '', cantidad: '', modoCantidad: 'manual' });
+      // 2) Subir a Storage
+      const blob = pdf.output('blob');
+      const pdfPath = `remisiones/${remisionParaPdf.consecutivo}.pdf`;
+      const storageRef = ref(storage, pdfPath);
 
-      window.open(pdf.output('bloburl'), '_blank');
+      await uploadBytes(storageRef, blob, { contentType: 'application/pdf' });
+      const pdfUrl = await getDownloadURL(storageRef);
+
+      // 3) Guardar URL en Firestore (mismo doc creado en transacción)
+      await updateDoc(doc(db, 'remisiones', remisionDocId), {
+        pdfUrl,
+        pdfPath,
+        impresa: true,
+        impresaEn: Timestamp.now(),
+        impresaPor: userProfile?.nombre || 'SISTEMA'
+      });
+
+      setUltimoPdfUrl(pdfUrl);
+
+      // 4) Limpiar formulario
+      limpiarFormulario();
+
+      // 5) Abrir PDF guardado (este será el mismo para reimpresión)
+      window.open(pdfUrl, '_blank');
+
     } catch (error) {
       console.error('Error al guardar la remisión:', error);
-      alert(error.message || 'No se pudo guardar la remisión.');
+      alert(error?.message || 'No se pudo guardar la remisión.');
     }
 
     setGuardando(false);
@@ -420,12 +340,25 @@ function PaginaRemisiones() {
   const handleDescargar = () => {
     if (ultimoPdf && ultimoConsecutivo) {
       ultimoPdf.save(`${ultimoConsecutivo}.pdf`);
+    } else if (ultimoPdfUrl) {
+      // Alternativa: abrir el URL guardado
+      window.open(ultimoPdfUrl, '_blank');
     }
   };
 
   const handleImprimir = () => {
-    if (!ultimoPdf) return;
+    // ✅ Preferimos imprimir desde el PDF guardado (idéntico)
+    if (ultimoPdfUrl) {
+      const iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      iframe.src = ultimoPdfUrl;
+      document.body.appendChild(iframe);
+      iframe.onload = () => iframe.contentWindow?.print();
+      return;
+    }
 
+    // Fallback: imprimir el PDF en memoria
+    if (!ultimoPdf) return;
     const blobUrl = ultimoPdf.output('bloburl');
     const iframe = document.createElement('iframe');
     iframe.style.display = 'none';
@@ -638,10 +571,12 @@ function PaginaRemisiones() {
         <button type="button" onClick={handleGuardar} disabled={guardando}>
           {guardando ? 'Guardando...' : 'Guardar y generar PDF'}
         </button>
-        <button type="button" onClick={handleImprimir} disabled={!ultimoPdf}>
+
+        <button type="button" onClick={handleImprimir} disabled={!ultimoPdf && !ultimoPdfUrl}>
           Imprimir última remisión
         </button>
-        <button type="button" onClick={handleDescargar} disabled={!ultimoPdf}>
+
+        <button type="button" onClick={handleDescargar} disabled={!ultimoPdf && !ultimoPdfUrl}>
           Descargar PDF
         </button>
       </div>

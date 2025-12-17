@@ -9,20 +9,11 @@ import {
   generarTextoTicketVenta,
   generarTextoTicketVentaMenor,
   generarTextoTicketGasto,
-  generarTextoTicketRemision,
   generarTextoTicketInventario
 } from '../utils/generarTickets';
 
 const isTauriEnvironment = () =>
-  typeof window !== 'undefined' && (Boolean(window.__TAURI__) || Boolean(window.__TAURI_INTERNALS__));
-
-const revivirFechas = (key, value) => {
-  if (typeof value === 'object' && value !== null && 'seconds' in value && 'nanoseconds' in value) {
-    return new Date(value.seconds * 1000 + value.nanoseconds / 1000000);
-  }
-  if (key === 'fecha' && typeof value === 'string' && value.includes('T')) return new Date(value);
-  return value;
-};
+  typeof window !== 'undefined' && window.__TAURI__ && window.__TAURI_INTERNALS__;
 
 function PaginaImpresion() {
   const [ticket, setTicket] = useState(null);
@@ -36,68 +27,58 @@ function PaginaImpresion() {
         window.close();
       }
     } catch (e) {
-      window.close();
+      console.warn('No se pudo cerrar la ventana de impresión:', e);
     }
   };
 
   useEffect(() => {
     try {
-      const dataString = localStorage.getItem('ticketData');
-      const userString = localStorage.getItem('ticketUser');
-      const type = localStorage.getItem('ticketType');
+      const raw = localStorage.getItem('ticketData');
+      const payload = raw ? JSON.parse(raw) : null;
 
-      if (dataString && userString && type) {
-        const data = JSON.parse(dataString, revivirFechas);
-        const user = JSON.parse(userString);
-        setTicket({ data, user, type });
-
-        localStorage.removeItem('ticketData');
-        localStorage.removeItem('ticketUser');
-        localStorage.removeItem('ticketType');
+      if (!payload?.tipo) {
+        setTicket('No hay datos para imprimir.');
+        return;
       }
-    } catch (error) {
-      console.error('Error al leer datos de impresión:', error);
+
+      // ✅ Remisiones NO van por ticket 80mm
+      if (payload.tipo === 'remision') {
+        setTicket('Las remisiones se imprimen en PDF. Use "Ver PDF" o "Reimprimir PDF".');
+        setTimeout(closePrintWindow, 1200);
+        return;
+      }
+
+      const { tipo, data, user } = payload;
+
+      const contenido = (() => {
+        switch (tipo) {
+          case 'compra': return generarTextoTicketCompra(data, user);
+          case 'venta': return generarTextoTicketVenta(data, user);
+          case 'ventaMenor': return generarTextoTicketVentaMenor(data, user);
+          case 'gasto': return generarTextoTicketGasto(data, user);
+          case 'inventario': return generarTextoTicketInventario(data, user);
+          default: return 'Tipo de ticket no soportado.';
+        }
+      })();
+
+      setTicket(contenido);
+
+      setTimeout(() => {
+        window.print();
+        setTimeout(closePrintWindow, 900);
+      }, 300);
+
+    } catch (e) {
+      console.error('Error al preparar impresión:', e);
+      setTicket('Error al preparar impresión.');
     }
   }, []);
 
-  const buildTexto = () => {
-    if (!ticket) return 'Cargando...';
-    const { type, data, user } = ticket;
-
-    switch (type) {
-      case 'compra': return generarTextoTicketCompra(data, user);
-      case 'venta': return generarTextoTicketVenta(data, user);
-      case 'ventaMenor': return generarTextoTicketVentaMenor(data, user);
-      case 'gasto': return generarTextoTicketGasto(data, user);
-      case 'remision': return generarTextoTicketRemision(data, user);
-
-      case 'inventario': {
-        const items = Array.isArray(data?.items) ? data.items : [];
-        return generarTextoTicketInventario(items, user);
-      }
-
-      default:
-        return `Error: Tipo de ticket no reconocido (${type})`;
-    }
-  };
-
-  useEffect(() => {
-    if (!ticket) return;
-
-    const timer = setTimeout(() => {
-      const handleAfterPrint = () => closePrintWindow();
-      window.onafterprint = handleAfterPrint;
-
-      window.print();
-      window.onfocus = () => setTimeout(handleAfterPrint, 500);
-    }, 100);
-
-    return () => clearTimeout(timer);
-  }, [ticket]);
-
   return (
-    <div style={{ fontFamily: 'Courier New, monospace', fontSize: '10px', padding: '8px' }}>
-      <pre style={{ whiteSpace: 'pre-wrap' }}>{buildTexto()}</pre>
+    <div className="ticket-container">
+      <pre className="ticket-pre">
+        {ticket || 'Cargando...'}
+      </pre>
     </div>
   );
 }

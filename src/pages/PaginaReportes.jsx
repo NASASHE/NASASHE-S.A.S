@@ -8,7 +8,9 @@ import {
   query,
   where,
   Timestamp,
-  orderBy
+  orderBy,
+  updateDoc,
+  doc
 } from 'firebase/firestore';
 
 import { useCaja } from '../context/CajaContext';
@@ -18,8 +20,7 @@ import {
   generarTextoTicketCompra,
   generarTextoTicketVenta,
   generarTextoTicketVentaMenor,
-  generarTextoTicketGasto,
-  generarTextoTicketRemision // ✅ AÑADE ESTO
+  generarTextoTicketGasto
 } from '../utils/generarTickets';
 
 import jsPDF from 'jspdf';
@@ -27,6 +28,10 @@ import autoTable from 'jspdf-autotable';
 import GraficaBarras from '../components/GraficaBarras';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { showMessage } from '../utils/showMessage';
+
+import { imprimirPdfDesdeUrl, generarPdfRemision } from '../utils/remisionPdf';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { storage } from '../firebase';
 
 const isTauriEnvironment = () =>
   typeof window !== 'undefined' && (Boolean(window.__TAURI__) || Boolean(window.__TAURI_INTERNALS__));
@@ -98,7 +103,7 @@ function PaginaReportes() {
   const [inventario, setInventario] = useState([]);
   const [loadingInventario, setLoadingInventario] = useState(false);
 
-  // ✅ Cache en memoria (para no pedir a Firebase cada vez)
+  // ✅ Cache en memoria
   const inventarioCargadoRef = useRef(false);
 
   // --- Estado Análisis ---
@@ -338,14 +343,14 @@ function PaginaReportes() {
     iframe.style.border = 'none';
     document.body.appendChild(iframe);
 
-    const doc = iframe.contentWindow.document;
-    doc.open();
-    doc.write(`<!DOCTYPE html><html><head><title>${titulo}</title>
+    const docRef = iframe.contentWindow.document;
+    docRef.open();
+    docRef.write(`<!DOCTYPE html><html><head><title>${titulo}</title>
       <style>
         body { font-family: 'Courier New', Courier, monospace; font-size: 10px; width: 80mm; margin: 0; padding: 8px; }
         @page { margin: 2mm; size: 80mm auto; }
       </style></head><body><pre>${contenido}</pre></body></html>`);
-    doc.close();
+    docRef.close();
 
     const ejecutarImpresion = () => {
       iframe.contentWindow.focus();
@@ -371,12 +376,41 @@ function PaginaReportes() {
   const printGastoEnNavegador = (data) => {
     imprimirTicketEnNavegador(generarTextoTicketGasto(data, userProfile), `Comprobante ${data.consecutivo}`);
   };
-  const printRemisionEnNavegador = (data) => {
-    imprimirTicketEnNavegador(
-      generarTextoTicketRemision(data, userProfile),
-      `Remisión ${data.consecutivo}`
-    );
+
+  // ✅ Remisión SIEMPRE PDF (NO ticket 80mm)
+  const printRemisionEnNavegador = async (remision) => {
+    try {
+      // 1) Si ya existe PDF guardado, imprimir ese
+      if (remision.pdfUrl) {
+        imprimirPdfDesdeUrl(remision.pdfUrl);
+        return;
+      }
+
+      // 2) Si no existe, lo generamos, lo subimos y lo guardamos
+      const pdf = await generarPdfRemision(remision);
+      const blob = pdf.output('blob');
+
+      const pdfPath = `remisiones/${remision.consecutivo}.pdf`;
+      const storageRef = ref(storage, pdfPath);
+
+      await uploadBytes(storageRef, blob, { contentType: 'application/pdf' });
+      const pdfUrl = await getDownloadURL(storageRef);
+
+      await updateDoc(doc(db, 'remisiones', remision.id), {
+        pdfUrl,
+        pdfPath,
+        impresa: true,
+        impresaEn: Timestamp.now(),
+        impresaPor: userProfile?.nombre || 'SISTEMA'
+      });
+
+      imprimirPdfDesdeUrl(pdfUrl);
+    } catch (error) {
+      console.error('Error reimprimiendo remisión:', error);
+      await showMessage('No se pudo reimprimir la remisión en PDF.', { title: 'Nasashe sas', type: 'error' });
+    }
   };
+
   const printInventarioEnNavegador = async (payload) => {
     const itemsParaImprimir = Array.isArray(payload?.items) && payload.items.length > 0
       ? payload.items
@@ -401,20 +435,27 @@ function PaginaReportes() {
         case 'ventaMenor': return printVentaMenorEnNavegador(datos);
         case 'gasto': return printGastoEnNavegador(datos);
         case 'inventario': return printInventarioEnNavegador(datos);
-        case 'remision': return printRemisionEnNavegador(datos); // ✅ AÑADIDO
+        case 'remision': return printRemisionEnNavegador(datos); // ✅ PDF
         default: return;
       }
     };
 
+    // ✅ En web: imprime normal con fallback
     if (!isTauriEnvironment()) {
       fallback();
       return;
     }
 
+    // ✅ En Tauri: seguimos usando ventana /imprimir SOLO para tickets (80mm)
+    // Remisión NO debe ir por /imprimir
+    if (tipo === 'remision') {
+      await printRemisionEnNavegador(datos);
+      return;
+    }
+
     try {
-      localStorage.setItem('ticketData', JSON.stringify(datos));
-      localStorage.setItem('ticketUser', JSON.stringify(userProfile));
-      localStorage.setItem('ticketType', tipo);
+      // Guardamos payload como antes (tu /imprimir lo lee)
+      localStorage.setItem('ticketData', JSON.stringify({ tipo, data: datos, user: userProfile }));
     } catch (e) {
       console.error('Error preparando impresión:', e);
       fallback();
@@ -441,7 +482,6 @@ function PaginaReportes() {
 
   // --- Inventario ---
   const handleFetchInventario = async (force = false) => {
-    // ✅ cache: si ya se cargó y NO es force, no vuelve a pedir
     if (inventarioCargadoRef.current && !force) return;
 
     setLoadingInventario(true);
@@ -465,11 +505,11 @@ function PaginaReportes() {
       return;
     }
 
-    const doc = new jsPDF();
-    doc.text('Reporte de Inventario Actual', 14, 15);
-    doc.setFontSize(10);
-    doc.text(`Generado por: ${userProfile?.nombre || 'SISTEMA'}`, 14, 20);
-    doc.text(`Fecha: ${new Date().toLocaleDateString('es-CO')}`, 14, 25);
+    const docPdf = new jsPDF();
+    docPdf.text('Reporte de Inventario Actual', 14, 15);
+    docPdf.setFontSize(10);
+    docPdf.text(`Generado por: ${userProfile?.nombre || 'SISTEMA'}`, 14, 20);
+    docPdf.text(`Fecha: ${new Date().toLocaleDateString('es-CO')}`, 14, 25);
 
     const tableColumn = ['Nombre', 'Precio Compra ($)', 'Stock Actual (kg/und)'];
     const tableRows = inventario.map(item => ([
@@ -478,11 +518,11 @@ function PaginaReportes() {
       Number(item?.stock ?? 0).toLocaleString('es-CO'),
     ]));
 
-    autoTable(doc, { head: [tableColumn], body: tableRows, startY: 30 });
+    autoTable(docPdf, { head: [tableColumn], body: tableRows, startY: 30 });
 
     const fechaHoy = new Date().toISOString().split('T')[0];
     try {
-      doc.save(`Reporte_Inventario_${fechaHoy}.pdf`);
+      docPdf.save(`Reporte_Inventario_${fechaHoy}.pdf`);
       await showMessage('Su archivo se exportó con éxito en la carpeta de descargas.', { title: 'Nasashe sas', type: 'info' });
     } catch (error) {
       console.error('Error al exportar el inventario a PDF:', error);
@@ -536,8 +576,8 @@ function PaginaReportes() {
 
       const comprasSnap = await getDocs(qCompras);
       comprasSnap.forEach(d => {
-        const items = d.data().items || [];
-        items.forEach(item => {
+        const itemsCompra = d.data().items || [];
+        itemsCompra.forEach(item => {
           const nombre = item.nombre || 'SIN NOMBRE';
           agregador[nombre] = (agregador[nombre] || 0) + Number(item.cantidad || 0);
         });
@@ -571,8 +611,6 @@ function PaginaReportes() {
     setLoading(false);
   };
 
-  // ✅ Extra recomendado + cache:
-  // al abrir Inventario por primera vez, carga automático (sin repetir peticiones)
   const irAInventario = async () => {
     setActiveTab('inventario');
     await handleFetchInventario(false);
@@ -582,7 +620,6 @@ function PaginaReportes() {
     <div className="pagina-reportes">
       <h1>Módulo de Reportes</h1>
 
-      {/* --- Pestañas --- */}
       <div className="tabs-container">
         <button className={`tab-button ${activeTab === 'cierre' ? 'active' : ''}`} onClick={() => setActiveTab('cierre')}>
           Cierre de Caja
@@ -608,7 +645,6 @@ function PaginaReportes() {
           Hist. Remisiones
         </button>
 
-        {/* ✅ EXTRA: carga inventario al entrar (cacheado) */}
         <button className={`tab-button ${activeTab === 'inventario' ? 'active' : ''}`} onClick={irAInventario}>
           Inventario
         </button>
@@ -619,7 +655,6 @@ function PaginaReportes() {
       </div>
 
       <div className="tab-content">
-
         {/* --- CIERRE --- */}
         {activeTab === 'cierre' && (
           <div>
@@ -887,17 +922,27 @@ function PaginaReportes() {
                       <td>{remision.destino?.nombre || 'N/D'}</td>
                       <td>{remision.conductor?.nombre || 'N/D'}</td>
                       <td>{Array.isArray(remision.items) ? remision.items.length : 0}</td>
+
+                      {/* ✅ CORREGIDO: UN SOLO <td> EN ACCIONES */}
                       <td>
-                        {/* Aquí podrías agregar reimpresión PDF si quieres */}
-                        <td>
+                        <button
+                          onClick={() => prepararEImprimir('remision', remision)}
+                          className="btn-reimprimir"
+                        >
+                          Re-imprimir PDF
+                        </button>
+
+                        {remision.pdfUrl && (
                           <button
-                            onClick={() => prepararEImprimir('remision', remision)}
-                            className="btn-reimprimir"
+                            onClick={() => window.open(remision.pdfUrl, '_blank')}
+                            className="btn-verpdf"
+                            style={{ marginLeft: 8 }}
                           >
-                            Re-imprimir
+                            Ver PDF
                           </button>
-                        </td>
+                        )}
                       </td>
+
                     </tr>
                   ))
                 )}
@@ -906,7 +951,7 @@ function PaginaReportes() {
           </div>
         )}
 
-        {/* ✅ INVENTARIO (YA SEPARADO) */}
+        {/* ✅ INVENTARIO */}
         {activeTab === 'inventario' && (
           <div>
             <div className="inventario-header">
@@ -914,7 +959,7 @@ function PaginaReportes() {
 
               <div className="inventario-header-botones">
                 <button
-                  onClick={() => handleFetchInventario(true)}   // fuerza recarga
+                  onClick={() => handleFetchInventario(true)}
                   className="btn-generar"
                   disabled={loadingInventario}
                 >
@@ -966,7 +1011,7 @@ function PaginaReportes() {
           </div>
         )}
 
-        {/* ✅ ANÁLISIS (YA SEPARADO) */}
+        {/* ✅ ANÁLISIS */}
         {activeTab === 'analisis' && (
           <div>
             <div className="reporte-controles">
