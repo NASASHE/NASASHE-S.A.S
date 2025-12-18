@@ -1,98 +1,122 @@
 // src/pages/PaginaLogin.jsx
-
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { auth, db } from '../firebase'; // 1. Importamos 'db'
-import { signInWithEmailAndPassword } from 'firebase/auth';
-// 2. Importamos las funciones de Firestore para BUSCAR
-import { collection, query, where, getDocs } from 'firebase/firestore'; 
-import './PaginaLogin.css';
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { auth, db } from "../firebase";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { collection, query, where, getDocs, limit } from "firebase/firestore";
+import "./PaginaLogin.css";
 
 function PaginaLogin() {
-  
-  // 3. Cambiamos 'email' por 'nombre'
-  const [nombre, setNombre] = useState(''); 
-  const [password, setPassword] = useState('');
+  const [usuario, setUsuario] = useState(""); // puede ser usuario, nombre o email
+  const [password, setPassword] = useState("");
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  // 4. ¡LA LÓGICA DEL "TRUCO"!
+  const normalizeKey = (v) => (v || "").trim().toUpperCase();
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
 
     try {
-      // 5. Paso A: Buscar al usuario en Firestore por su 'nombre'
-      const usuariosRef = collection(db, "usuarios");
-      // Creamos la consulta: "buscar donde 'nombre' sea igual a lo que escribió el usuario"
-      const q = query(usuariosRef, where("nombre", "==", nombre.toUpperCase()));
-      
-      const querySnapshot = await getDocs(q);
+      const input = usuario.trim();
+      if (!input || !password) throw new Error("Completa los campos.");
 
-      if (querySnapshot.empty) {
-        // Si no encontramos a "SAMI", mostramos error
+      // ✅ Si escriben un correo, login directo
+      if (input.includes("@")) {
+        await signInWithEmailAndPassword(auth, input.toLowerCase(), password);
+        navigate("/");
+        return;
+      }
+
+      const key = normalizeKey(input);
+
+      const usuariosPubRef = collection(db, "usuarios_publicos");
+
+      // ✅ 1) Buscar por USUARIO
+      let q = query(usuariosPubRef, where("usuario", "==", key), limit(1));
+      let snap = await getDocs(q);
+
+      // ✅ 2) Si no existe por usuario, buscar por NOMBRE (nombreKey)
+      if (snap.empty) {
+        q = query(usuariosPubRef, where("nombreKey", "==", key), limit(1));
+        snap = await getDocs(q);
+      }
+
+      if (snap.empty) {
         throw new Error("Usuario no encontrado.");
       }
 
-      // 6. Paso B: Obtener el email real de ese usuario
-      //    (Asumimos que el nombre es único)
-      const userDoc = querySnapshot.docs[0].data();
-      const emailReal = userDoc.email;
+      const data = snap.docs[0].data();
 
-      // 7. Paso C: Iniciar sesión en Firebase Auth con el email y la clave
-      await signInWithEmailAndPassword(auth, emailReal, password);
-      
-      // ¡Éxito!
-      setLoading(false);
-      navigate('/'); // Redirigimos al Dashboard
-
-    } catch (err) {
-      setLoading(false);
-      if (err.message === "Usuario no encontrado.") {
-        setError('Nombre de usuario incorrecto.');
-      } else if (err.code === 'auth/invalid-credential') {
-        setError('Contraseña incorrecta.');
-      } else {
-        setError('Error al iniciar sesión. Intente de nuevo.');
+      // ✅ 3) Validar activo
+      if (data.activo === false) {
+        throw new Error("Usuario desactivado.");
       }
+
+      const emailReal = (data.email || "").toLowerCase();
+
+      if (!emailReal) {
+        throw new Error("Usuario sin email asociado (usuarios_publicos).");
+      }
+
+      await signInWithEmailAndPassword(auth, emailReal, password);
+      navigate("/");
+    } catch (err) {
       console.error(err);
+
+      if (err.message === "Usuario no encontrado.") {
+        setError("Usuario o nombre incorrecto.");
+      } else if (err.message === "Usuario desactivado.") {
+        setError("Usuario desactivado. Contacte al administrador.");
+      } else if (err.code === "auth/invalid-credential") {
+        setError("Contraseña incorrecta.");
+      } else if (err.code === "permission-denied") {
+        setError("No hay permisos para leer usuarios_publicos. Revisa Firestore Rules.");
+      } else {
+        setError("Error al iniciar sesión. Intente de nuevo.");
+      }
+    } finally {
+      setLoading(false);
     }
   };
-
 
   return (
     <div className="login-page-container">
       <div className="login-box">
         <h1>Iniciar Sesión</h1>
+
         <form onSubmit={handleLogin} className="login-form">
           <div className="form-grupo">
-            {/* 8. Cambiamos 'Email' por 'Nombre de Usuario' */}
-            <label htmlFor="nombre-usuario">Nombre de Usuario:</label>
-            <input 
-              id="nombre-usuario"
-              type="text" // Cambiado de 'email' a 'text'
-              value={nombre}
-              onChange={(e) => setNombre(e.target.value)}
+            <label htmlFor="usuario">Usuario o correo:</label>
+            <input
+              id="usuario"
+              type="text"
+              value={usuario}
+              onChange={(e) => setUsuario(e.target.value)}
               required
+              autoComplete="username"
             />
           </div>
+
           <div className="form-grupo">
             <label htmlFor="password">Contraseña:</label>
-            <input 
+            <input
               id="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              autoComplete="current-password"
             />
           </div>
-          
+
           <button type="submit" className="login-btn" disabled={loading}>
-            {loading ? 'Ingresando...' : 'Ingresar'}
+            {loading ? "Ingresando..." : "Ingresar"}
           </button>
-          
+
           {error && <p className="login-error">{error}</p>}
         </form>
       </div>

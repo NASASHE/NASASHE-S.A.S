@@ -1,10 +1,16 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // ✅ Se puede leer antes del login (para buscar usuario->email)
+    match /usuarios_publicos/{docId} {
+      allow read: if true;
+      allow write: if request.auth != null; // o si quieres más estricto: solo admin con custom claims
+    }
+
+    // ✅ Todo lo demás SOLO logueado
     match /{document=**} {
-      // Regla de transición: NO rompe la versión actual
-      allow read, write: if request.auth != null
-                         || request.time < timestamp.date(2026, 10, 5);
+      allow read, write: if request.auth != null;
     }
   }
 }

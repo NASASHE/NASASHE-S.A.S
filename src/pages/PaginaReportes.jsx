@@ -1,7 +1,7 @@
 // src/pages/PaginaReportes.jsx
 
 import React, { useState, useRef } from 'react';
-import { db } from '../firebase';
+import { db, storage } from '../firebase';
 import {
   collection,
   getDocs,
@@ -31,10 +31,11 @@ import { showMessage } from '../utils/showMessage';
 
 import { imprimirPdfDesdeUrl, generarPdfRemision } from '../utils/remisionPdf';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from '../firebase';
 
 const isTauriEnvironment = () =>
   typeof window !== 'undefined' && (Boolean(window.__TAURI__) || Boolean(window.__TAURI_INTERNALS__));
+
+const BASE = import.meta.env.BASE_URL || '/';
 
 const getTodayDate = () => new Date().toISOString().split('T')[0];
 
@@ -102,8 +103,6 @@ function PaginaReportes() {
   // --- Estados Inventario ---
   const [inventario, setInventario] = useState([]);
   const [loadingInventario, setLoadingInventario] = useState(false);
-
-  // ✅ Cache en memoria
   const inventarioCargadoRef = useRef(false);
 
   // --- Estado Análisis ---
@@ -181,7 +180,11 @@ function PaginaReportes() {
       const snap = await getDocs(q);
       const compras = snap.docs.map(docSnap => {
         const data = docSnap.data();
-        return { id: docSnap.id, ...data, fecha: data.fecha?.toDate ? data.fecha.toDate() : new Date() };
+        return {
+          id: docSnap.id,
+          ...data,
+          fechaDate: data.fecha?.toDate ? data.fecha.toDate() : new Date()
+        };
       });
 
       setHistorialCompras(compras);
@@ -213,7 +216,11 @@ function PaginaReportes() {
       const snap = await getDocs(q);
       const ventas = snap.docs.map(docSnap => {
         const data = docSnap.data();
-        return { id: docSnap.id, ...data, fecha: data.fecha?.toDate ? data.fecha.toDate() : new Date() };
+        return {
+          id: docSnap.id,
+          ...data,
+          fechaDate: data.fecha?.toDate ? data.fecha.toDate() : new Date()
+        };
       });
 
       setHistorialVentas(ventas);
@@ -245,7 +252,11 @@ function PaginaReportes() {
       const snap = await getDocs(q);
       const ventas = snap.docs.map(docSnap => {
         const data = docSnap.data();
-        return { id: docSnap.id, ...data, fecha: data.fecha?.toDate ? data.fecha.toDate() : new Date() };
+        return {
+          id: docSnap.id,
+          ...data,
+          fechaDate: data.fecha?.toDate ? data.fecha.toDate() : new Date()
+        };
       });
 
       setHistorialVentasMenores(ventas);
@@ -277,7 +288,11 @@ function PaginaReportes() {
       const snap = await getDocs(q);
       const gastos = snap.docs.map(docSnap => {
         const data = docSnap.data();
-        return { id: docSnap.id, ...data, fecha: data.fecha?.toDate ? data.fecha.toDate() : new Date() };
+        return {
+          id: docSnap.id,
+          ...data,
+          fechaDate: data.fecha?.toDate ? data.fecha.toDate() : new Date()
+        };
       });
 
       setHistorialGastos(gastos);
@@ -318,10 +333,14 @@ function PaginaReportes() {
 
       const remisiones = snap.docs.map(docSnap => {
         const data = docSnap.data();
+        const fechaDate = data.fecha?.toDate ? data.fecha.toDate() : new Date();
+
+        // ✅ IMPORTANTÍSIMO:
+        // Mantenemos data.fecha como Timestamp para que generarPdfRemision no se rompa.
         return {
           id: docSnap.id,
           ...data,
-          fecha: data.fecha?.toDate ? data.fecha.toDate() : new Date()
+          fechaDate
         };
       });
 
@@ -343,14 +362,14 @@ function PaginaReportes() {
     iframe.style.border = 'none';
     document.body.appendChild(iframe);
 
-    const docRef = iframe.contentWindow.document;
-    docRef.open();
-    docRef.write(`<!DOCTYPE html><html><head><title>${titulo}</title>
+    const d = iframe.contentWindow.document;
+    d.open();
+    d.write(`<!DOCTYPE html><html><head><title>${titulo}</title>
       <style>
         body { font-family: 'Courier New', Courier, monospace; font-size: 10px; width: 80mm; margin: 0; padding: 8px; }
         @page { margin: 2mm; size: 80mm auto; }
       </style></head><body><pre>${contenido}</pre></body></html>`);
-    docRef.close();
+    d.close();
 
     const ejecutarImpresion = () => {
       iframe.contentWindow.focus();
@@ -377,16 +396,16 @@ function PaginaReportes() {
     imprimirTicketEnNavegador(generarTextoTicketGasto(data, userProfile), `Comprobante ${data.consecutivo}`);
   };
 
-  // ✅ Remisión SIEMPRE PDF (NO ticket 80mm)
+  // ✅ Remisión: SIEMPRE PDF (igual al original)
   const printRemisionEnNavegador = async (remision) => {
     try {
       // 1) Si ya existe PDF guardado, imprimir ese
-      if (remision.pdfUrl) {
+      if (remision?.pdfUrl) {
         imprimirPdfDesdeUrl(remision.pdfUrl);
         return;
       }
 
-      // 2) Si no existe, lo generamos, lo subimos y lo guardamos
+      // 2) Si no existe, lo generamos, lo subimos y lo guardamos (solo 1 vez)
       const pdf = await generarPdfRemision(remision);
       const blob = pdf.output('blob');
 
@@ -435,27 +454,22 @@ function PaginaReportes() {
         case 'ventaMenor': return printVentaMenorEnNavegador(datos);
         case 'gasto': return printGastoEnNavegador(datos);
         case 'inventario': return printInventarioEnNavegador(datos);
-        case 'remision': return printRemisionEnNavegador(datos); // ✅ PDF
+        case 'remision': return printRemisionEnNavegador(datos);
         default: return;
       }
     };
 
-    // ✅ En web: imprime normal con fallback
+    // ✅ En WEB (GitHub Pages), imprimimos aquí mismo.
     if (!isTauriEnvironment()) {
       fallback();
       return;
     }
 
-    // ✅ En Tauri: seguimos usando ventana /imprimir SOLO para tickets (80mm)
-    // Remisión NO debe ir por /imprimir
-    if (tipo === 'remision') {
-      await printRemisionEnNavegador(datos);
-      return;
-    }
-
+    // ✅ En TAURI, abrimos ventana /imprimir
     try {
-      // Guardamos payload como antes (tu /imprimir lo lee)
-      localStorage.setItem('ticketData', JSON.stringify({ tipo, data: datos, user: userProfile }));
+      localStorage.setItem('ticketData', JSON.stringify(datos));
+      localStorage.setItem('ticketUser', JSON.stringify(userProfile));
+      localStorage.setItem('ticketType', tipo);
     } catch (e) {
       console.error('Error preparando impresión:', e);
       fallback();
@@ -466,7 +480,7 @@ function PaginaReportes() {
     const label = `ticket-${tipo}-${normalizar(datos.consecutivo)}`;
 
     const webview = new WebviewWindow(label, {
-      url: '/imprimir',
+      url: `${BASE}imprimir`,
       title: tipo === 'inventario' ? 'Reporte de Inventario' : `Ticket ${datos.consecutivo || ''}`.trim(),
       width: 310,
       height: 600,
@@ -505,11 +519,11 @@ function PaginaReportes() {
       return;
     }
 
-    const docPdf = new jsPDF();
-    docPdf.text('Reporte de Inventario Actual', 14, 15);
-    docPdf.setFontSize(10);
-    docPdf.text(`Generado por: ${userProfile?.nombre || 'SISTEMA'}`, 14, 20);
-    docPdf.text(`Fecha: ${new Date().toLocaleDateString('es-CO')}`, 14, 25);
+    const d = new jsPDF();
+    d.text('Reporte de Inventario Actual', 14, 15);
+    d.setFontSize(10);
+    d.text(`Generado por: ${userProfile?.nombre || 'SISTEMA'}`, 14, 20);
+    d.text(`Fecha: ${new Date().toLocaleDateString('es-CO')}`, 14, 25);
 
     const tableColumn = ['Nombre', 'Precio Compra ($)', 'Stock Actual (kg/und)'];
     const tableRows = inventario.map(item => ([
@@ -518,11 +532,11 @@ function PaginaReportes() {
       Number(item?.stock ?? 0).toLocaleString('es-CO'),
     ]));
 
-    autoTable(docPdf, { head: [tableColumn], body: tableRows, startY: 30 });
+    autoTable(d, { head: [tableColumn], body: tableRows, startY: 30 });
 
     const fechaHoy = new Date().toISOString().split('T')[0];
     try {
-      docPdf.save(`Reporte_Inventario_${fechaHoy}.pdf`);
+      d.save(`Reporte_Inventario_${fechaHoy}.pdf`);
       await showMessage('Su archivo se exportó con éxito en la carpeta de descargas.', { title: 'Nasashe sas', type: 'info' });
     } catch (error) {
       console.error('Error al exportar el inventario a PDF:', error);
@@ -576,8 +590,8 @@ function PaginaReportes() {
 
       const comprasSnap = await getDocs(qCompras);
       comprasSnap.forEach(d => {
-        const itemsCompra = d.data().items || [];
-        itemsCompra.forEach(item => {
+        const items = d.data().items || [];
+        items.forEach(item => {
           const nombre = item.nombre || 'SIN NOMBRE';
           agregador[nombre] = (agregador[nombre] || 0) + Number(item.cantidad || 0);
         });
@@ -655,7 +669,7 @@ function PaginaReportes() {
       </div>
 
       <div className="tab-content">
-        {/* --- CIERRE --- */}
+
         {activeTab === 'cierre' && (
           <div>
             <div className="reporte-controles">
@@ -697,7 +711,6 @@ function PaginaReportes() {
           </div>
         )}
 
-        {/* --- HISTORIAL COMPRAS --- */}
         {activeTab === 'historialCompras' && (
           <div>
             <div className="reporte-controles">
@@ -723,7 +736,7 @@ function PaginaReportes() {
                 ) : (
                   historialCompras.map(compra => (
                     <tr key={compra.id}>
-                      <td>{compra.fecha.toLocaleString('es-CO')}</td>
+                      <td>{compra.fechaDate.toLocaleString('es-CO')}</td>
                       <td>{compra.consecutivo}</td>
                       <td>{compra.reciclador}</td>
                       <td>${Number(compra.total || 0).toLocaleString('es-CO')}</td>
@@ -740,7 +753,6 @@ function PaginaReportes() {
           </div>
         )}
 
-        {/* --- HISTORIAL VENTAS --- */}
         {activeTab === 'historialVentas' && (
           <div>
             <div className="reporte-controles">
@@ -766,7 +778,7 @@ function PaginaReportes() {
                 ) : (
                   historialVentas.map(venta => (
                     <tr key={venta.id}>
-                      <td>{venta.fecha.toLocaleString('es-CO')}</td>
+                      <td>{venta.fechaDate.toLocaleString('es-CO')}</td>
                       <td>{venta.consecutivo}</td>
                       <td>{venta.proveedor?.nombre || 'N/D'}</td>
                       <td>${Number(venta.total || 0).toLocaleString('es-CO')}</td>
@@ -783,7 +795,6 @@ function PaginaReportes() {
           </div>
         )}
 
-        {/* --- HISTORIAL VENTAS MENORES --- */}
         {activeTab === 'historialVentasMenores' && (
           <div>
             <div className="reporte-controles">
@@ -809,7 +820,7 @@ function PaginaReportes() {
                 ) : (
                   historialVentasMenores.map(venta => (
                     <tr key={venta.id}>
-                      <td>{venta.fecha.toLocaleString('es-CO')}</td>
+                      <td>{venta.fechaDate.toLocaleString('es-CO')}</td>
                       <td>{venta.consecutivo}</td>
                       <td>{venta.cliente || 'N/D'}</td>
                       <td>${Number(venta.total || 0).toLocaleString('es-CO')}</td>
@@ -826,7 +837,6 @@ function PaginaReportes() {
           </div>
         )}
 
-        {/* --- HISTORIAL GASTOS --- */}
         {activeTab === 'historialGastos' && (
           <div>
             <div className="reporte-controles">
@@ -852,7 +862,7 @@ function PaginaReportes() {
                 ) : (
                   historialGastos.map(gasto => (
                     <tr key={gasto.id}>
-                      <td>{gasto.fecha.toLocaleString('es-CO')}</td>
+                      <td>{gasto.fechaDate.toLocaleString('es-CO')}</td>
                       <td>{gasto.consecutivo}</td>
                       <td>{gasto.concepto}</td>
                       <td>{gasto.descripcion}</td>
@@ -870,7 +880,6 @@ function PaginaReportes() {
           </div>
         )}
 
-        {/* --- HISTORIAL REMISIONES --- */}
         {activeTab === 'historialRemisiones' && (
           <div>
             <div className="reporte-controles">
@@ -917,13 +926,11 @@ function PaginaReportes() {
                 ) : (
                   historialRemisiones.map(remision => (
                     <tr key={remision.id}>
-                      <td>{(remision.fecha instanceof Date ? remision.fecha : new Date(remision.fecha)).toLocaleString('es-CO')}</td>
+                      <td>{remision.fechaDate?.toLocaleString('es-CO')}</td>
                       <td>{remision.consecutivo}</td>
                       <td>{remision.destino?.nombre || 'N/D'}</td>
                       <td>{remision.conductor?.nombre || 'N/D'}</td>
                       <td>{Array.isArray(remision.items) ? remision.items.length : 0}</td>
-
-                      {/* ✅ CORREGIDO: UN SOLO <td> EN ACCIONES */}
                       <td>
                         <button
                           onClick={() => prepararEImprimir('remision', remision)}
@@ -931,18 +938,7 @@ function PaginaReportes() {
                         >
                           Re-imprimir PDF
                         </button>
-
-                        {remision.pdfUrl && (
-                          <button
-                            onClick={() => window.open(remision.pdfUrl, '_blank')}
-                            className="btn-verpdf"
-                            style={{ marginLeft: 8 }}
-                          >
-                            Ver PDF
-                          </button>
-                        )}
                       </td>
-
                     </tr>
                   ))
                 )}
@@ -951,7 +947,6 @@ function PaginaReportes() {
           </div>
         )}
 
-        {/* ✅ INVENTARIO */}
         {activeTab === 'inventario' && (
           <div>
             <div className="inventario-header">
@@ -1011,7 +1006,6 @@ function PaginaReportes() {
           </div>
         )}
 
-        {/* ✅ ANÁLISIS */}
         {activeTab === 'analisis' && (
           <div>
             <div className="reporte-controles">
