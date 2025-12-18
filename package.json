@@ -1,5 +1,5 @@
 {
-  "name": "Nasashe s.a.s",
+  "name": "nasashe_sas",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -8,7 +8,9 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.9.0",
