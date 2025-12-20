@@ -18,6 +18,7 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 import { db, storage } from "../firebase";
 import { useCaja } from "../context/CajaContext";
+import { abrirPdfEnSistema } from "../utils/abrirPdf"; // ajusta la ruta
 
 const BASE = import.meta.env.BASE_URL || "/";
 
@@ -456,7 +457,7 @@ function PaginaRemisiones() {
       setItemSeleccionado({ articuloId: "", cantidad: "", modoCantidad: "manual" });
 
       // abrir PDF
-      window.open(pdfUrl, "_blank");
+      await abrirPdfEnSistema(pdfUrl);
     } catch (err) {
       console.error("Error guardando remisión:", err);
       alert(err?.message || "No se pudo guardar la remisión.");

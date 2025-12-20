@@ -31,6 +31,7 @@ import { showMessage } from '../utils/showMessage';
 
 import { imprimirPdfDesdeUrl, generarPdfRemision } from '../utils/remisionPdf';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { abrirPdfEnSistema } from "../utils/abrirPdf"; // ajusta ruta
 
 const isTauriEnvironment = () =>
   typeof window !== 'undefined' && (Boolean(window.__TAURI__) || Boolean(window.__TAURI_INTERNALS__));
@@ -401,7 +402,11 @@ function PaginaReportes() {
     try {
       // 1) Si ya existe PDF guardado, imprimir ese
       if (remision?.pdfUrl) {
-        imprimirPdfDesdeUrl(remision.pdfUrl);
+        if (isTauriEnvironment()) {
+          await abrirPdfEnSistema(remision.pdfUrl);
+        } else {
+          imprimirPdfDesdeUrl(remision.pdfUrl);
+        }
         return;
       }
 
@@ -423,7 +428,7 @@ function PaginaReportes() {
         impresaPor: userProfile?.nombre || 'SISTEMA'
       });
 
-      imprimirPdfDesdeUrl(pdfUrl);
+      await abrirPdfEnSistema(pdfUrl);
     } catch (error) {
       console.error('Error reimprimiendo remisión:', error);
       await showMessage('No se pudo reimprimir la remisión en PDF.', { title: 'Nasashe sas', type: 'error' });
@@ -462,6 +467,12 @@ function PaginaReportes() {
     // ✅ En WEB (GitHub Pages), imprimimos aquí mismo.
     if (!isTauriEnvironment()) {
       fallback();
+      return;
+    }
+
+    // ✅ Para REMISION: siempre PDF, también en TAURI (no usar /imprimir)
+    if (tipo === 'remision') {
+      await printRemisionEnNavegador(datos);
       return;
     }
 

@@ -9,7 +9,11 @@ import {
   getDocs,
   runTransaction,
   Timestamp,
-  updateDoc
+  updateDoc,
+  query,
+  where,
+  orderBy,
+  limit
 } from 'firebase/firestore';
 
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -17,6 +21,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase';
 import { useCaja } from '../context/CajaContext';
 import { generarPdfRemision } from '../utils/remisionPdf';
+import { abrirPdfEnSistema } from '../utils/abrirPdf';
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -95,6 +100,64 @@ function PaginaRemisiones() {
     };
 
     cargarDatos();
+  }, []);
+
+  useEffect(() => {
+    const cargarUltimaRemision = async () => {
+      try {
+        // 1) Intentar desde localStorage
+        const savedUrl = localStorage.getItem('ultimaRemisionPdfUrl') || '';
+        const savedConsec = localStorage.getItem('ultimaRemisionConsecutivo') || '';
+        const savedDocId = localStorage.getItem('ultimaRemisionDocId') || '';
+
+        if (savedUrl) {
+          setUltimoPdfUrl(savedUrl);
+          if (savedConsec) setUltimoConsecutivo(savedConsec);
+          return;
+        }
+
+        // 2) Si hay docId pero no url, leer doc
+        if (savedDocId) {
+          const snap = await getDoc(doc(db, 'remisiones', savedDocId));
+          if (snap.exists()) {
+            const data = snap.data();
+            if (data?.pdfUrl) {
+              setUltimoPdfUrl(data.pdfUrl);
+              setUltimoConsecutivo(data.consecutivo || '');
+              localStorage.setItem('ultimaRemisionPdfUrl', data.pdfUrl);
+              localStorage.setItem('ultimaRemisionConsecutivo', data.consecutivo || '');
+              return;
+            }
+          }
+        }
+
+        // 3) Si no hay nada guardado, buscar la última remisión
+        const q = query(
+          collection(db, 'remisiones'),
+          orderBy('fecha', 'desc'),
+          limit(1)
+        );
+        const lastSnap = await getDocs(q);
+
+        if (!lastSnap.empty) {
+          const lastDoc = lastSnap.docs[0];
+          const data = lastDoc.data();
+
+          if (data?.pdfUrl) {
+            setUltimoPdfUrl(data.pdfUrl);
+            setUltimoConsecutivo(data.consecutivo || '');
+
+            localStorage.setItem('ultimaRemisionPdfUrl', data.pdfUrl);
+            localStorage.setItem('ultimaRemisionConsecutivo', data.consecutivo || '');
+            localStorage.setItem('ultimaRemisionDocId', lastDoc.id);
+          }
+        }
+      } catch (err) {
+        console.error('Error cargando última remisión:', err);
+      }
+    };
+
+    cargarUltimaRemision();
   }, []);
 
   const handleDestinoChange = (e) => {
@@ -323,11 +386,20 @@ function PaginaRemisiones() {
 
       setUltimoPdfUrl(pdfUrl);
 
+      try {
+        localStorage.setItem('ultimaRemisionPdfUrl', pdfUrl);
+        localStorage.setItem('ultimaRemisionConsecutivo', remisionParaPdf.consecutivo);
+        localStorage.setItem('ultimaRemisionDocId', remisionDocId);
+      } catch (e) {
+        console.warn('No se pudo guardar última remisión en localStorage', e);
+      }
+
+
       // 4) Limpiar formulario
       limpiarFormulario();
 
       // 5) Abrir PDF guardado (este será el mismo para reimpresión)
-      window.open(pdfUrl, '_blank');
+      await abrirPdfEnSistema(pdfUrl);
 
     } catch (error) {
       console.error('Error al guardar la remisión:', error);
@@ -337,36 +409,29 @@ function PaginaRemisiones() {
     setGuardando(false);
   };
 
-  const handleDescargar = () => {
-    if (ultimoPdf && ultimoConsecutivo) {
-      ultimoPdf.save(`${ultimoConsecutivo}.pdf`);
-    } else if (ultimoPdfUrl) {
-      // Alternativa: abrir el URL guardado
-      window.open(ultimoPdfUrl, '_blank');
-    }
-  };
-
-  const handleImprimir = () => {
-    // ✅ Preferimos imprimir desde el PDF guardado (idéntico)
+  const handleDescargar = async () => {
     if (ultimoPdfUrl) {
-      const iframe = document.createElement('iframe');
-      iframe.style.display = 'none';
-      iframe.src = ultimoPdfUrl;
-      document.body.appendChild(iframe);
-      iframe.onload = () => iframe.contentWindow?.print();
+      await abrirPdfEnSistema(ultimoPdfUrl);
       return;
     }
 
-    // Fallback: imprimir el PDF en memoria
-    if (!ultimoPdf) return;
-    const blobUrl = ultimoPdf.output('bloburl');
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    iframe.src = blobUrl;
-    document.body.appendChild(iframe);
-    iframe.onload = () => {
-      iframe.contentWindow?.print();
-    };
+    if (ultimoPdf && ultimoConsecutivo) {
+      ultimoPdf.save(`${ultimoConsecutivo}.pdf`);
+      return;
+    }
+
+    alert('Aún no hay una remisión para descargar.');
+  };
+
+  const handleImprimir = async () => {
+    // ✅ Caso normal: ya existe la última remisión
+    if (ultimoPdfUrl) {
+      await abrirPdfEnSistema(ultimoPdfUrl);
+      return;
+    }
+
+    // ⚠️ Si aún no hay ninguna remisión
+    alert('Aún no hay una remisión para imprimir.');
   };
 
   if (!esAdmin) {
@@ -572,11 +637,11 @@ function PaginaRemisiones() {
           {guardando ? 'Guardando...' : 'Guardar y generar PDF'}
         </button>
 
-        <button type="button" onClick={handleImprimir} disabled={!ultimoPdf && !ultimoPdfUrl}>
+        <button type="button" onClick={handleImprimir}>
           Imprimir última remisión
         </button>
 
-        <button type="button" onClick={handleDescargar} disabled={!ultimoPdf && !ultimoPdfUrl}>
+        <button type="button" onClick={handleDescargar}>
           Descargar PDF
         </button>
       </div>

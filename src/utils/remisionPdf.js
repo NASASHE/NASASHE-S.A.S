@@ -58,18 +58,31 @@ export const generarPdfRemision = async (remisionData) => {
   pdf.setFontSize(14);
   pdf.text("REMISIÓN", pageWidth - margin, y + 10, { align: "right" });
   pdf.setFontSize(12);
-  pdf.text(remisionData?.consecutivo || "REM-SIN-CONSECT", pageWidth - margin, y + 18, { align: "right" });
+  pdf.text(
+    remisionData?.consecutivo || "REM-SIN-CONSECT",
+    pageWidth - margin,
+    y + 18,
+    { align: "right" }
+  );
 
   y += 30;
   pdf.setFontSize(11);
 
   // Destino
   pdf.text(`Destino: ${remisionData?.destino?.nombre || "N/D"}`, margin, y);
-  pdf.text(`Dirección: ${remisionData?.destino?.direccion || "N/D"}`, pageWidth / 2, y);
+  pdf.text(
+    `Dirección: ${remisionData?.destino?.direccion || "N/D"}`,
+    pageWidth / 2,
+    y
+  );
 
   y += 6;
   pdf.text(`NIT: ${remisionData?.destino?.nit || "N/D"}`, margin, y);
-  pdf.text(`Teléfono: ${remisionData?.destino?.telefono || "N/D"}`, pageWidth / 2, y);
+  pdf.text(
+    `Teléfono: ${remisionData?.destino?.telefono || "N/D"}`,
+    pageWidth / 2,
+    y
+  );
 
   // Conductor
   y += 10;
@@ -78,14 +91,22 @@ export const generarPdfRemision = async (remisionData) => {
 
   y += 6;
   pdf.text(`Conductor: ${remisionData?.conductor?.nombre || "N/D"}`, margin, y);
-  pdf.text(`Cédula: ${remisionData?.conductor?.cedula || "N/D"}`, pageWidth / 2, y);
+  pdf.text(
+    `Cédula: ${remisionData?.conductor?.cedula || "N/D"}`,
+    pageWidth / 2,
+    y
+  );
 
   y += 6;
   pdf.text(`Dirección: ${remisionData?.conductor?.direccion || "N/D"}`, margin, y);
 
   y += 6;
   pdf.text(`Vínculo: ${remisionData?.conductor?.vinculo || "N/D"}`, margin, y);
-  pdf.text(`Placa: ${remisionData?.conductor?.placa || "N/D"}`, pageWidth / 2, y);
+  pdf.text(
+    `Placa: ${remisionData?.conductor?.placa || "N/D"}`,
+    pageWidth / 2,
+    y
+  );
 
   y += 6;
   pdf.text(`Celular: ${remisionData?.conductor?.celular || "N/D"}`, margin, y);
@@ -110,30 +131,115 @@ export const generarPdfRemision = async (remisionData) => {
     styles: { fontSize: 10, cellPadding: 2 },
     theme: "grid",
     headStyles: { fillColor: [26, 71, 77] },
-    margin: { left: margin, right: margin },
+    margin: { left: margin, right: margin, top: 30 },
     columnStyles: {
       0: { cellWidth: 20 },
       1: { cellWidth: 120 },
       2: { cellWidth: 30, halign: "right" },
     },
+
+    // ✅ Header simple repetido en cada página de la tabla
+    didDrawPage: () => {
+      const currentPage = pdf.internal.getNumberOfPages();
+
+      // ✅ No repetir en la primera página (ya existe el encabezado arriba)
+      if (currentPage === 1) return;
+
+      pdf.setFontSize(12);
+      pdf.text("REMISIÓN", pageWidth - margin, 12, { align: "right" });
+
+      pdf.setFontSize(10);
+      pdf.text(
+        remisionData?.consecutivo || "",
+        pageWidth - margin,
+        18,
+        { align: "right" }
+      );
+    },
   });
 
   // Firmas
-  const finalY = pdf.lastAutoTable.finalY + 18;
-  const colW = (pageWidth - margin * 2) / 3;
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const espacioFirmas = 45;
 
-  pdf.line(margin, finalY - 8, pageWidth - margin, finalY - 8);
+  let afterTableY = pdf.lastAutoTable.finalY + 10;
+
+  // 👉 Si no hay espacio, nueva página
+  if (afterTableY + espacioFirmas > pageHeight - margin) {
+    pdf.addPage();
+
+    // Header en la página SOLO de firmas (opcional)
+    pdf.setFontSize(12);
+    pdf.text("REMISIÓN", pageWidth - margin, 12, { align: "right" });
+
+    pdf.setFontSize(10);
+    pdf.text(
+      remisionData?.consecutivo || "",
+      pageWidth - margin,
+      18,
+      { align: "right" }
+    );
+
+    afterTableY = 30; // bajamos para no pisar el header
+  }
+
+  const colW = (pageWidth - margin * 2) / 3;
   pdf.setFontSize(10);
-  pdf.text("Firma y sello quien diligencia", margin + 6, finalY);
-  pdf.text("Firma Conductor", margin + colW + 20, finalY);
-  pdf.text("Firma cliente y/o Recibidor", margin + colW * 2 + 8, finalY);
+
+  const firmaW = 40;
+  const firmaH = 18;
+  const firmaX = margin + 6;
+  const firmaY = afterTableY;
+
+  try {
+    const firmaUrl = `${BASE}icons/Firma.jpg`;
+    const firmaData = await cargarImagenComoBase64(encodeURI(firmaUrl));
+    pdf.addImage(firmaData, "JPEG", firmaX, firmaY, firmaW, firmaH);
+  } catch (e) {
+    console.warn("Firma no cargó:", e);
+  }
+
+  const lineY = firmaY + firmaH + 4;
+  // Líneas independientes por firma
+  pdf.line(
+    margin + 3,
+    lineY,
+    margin + colW - 3,
+    lineY
+  );
+
+  pdf.line(
+    margin + colW + 3,
+    lineY,
+    margin + colW * 2 - 3,
+    lineY
+  );
+
+  pdf.line(
+    margin + colW * 2 + 3,
+    lineY,
+    pageWidth - margin - 3,
+    lineY
+  );
+
+  const textY = lineY + 6;
+  pdf.text("Firma y sello quien diligencia", margin + 3, textY);
+  pdf.text("Firma Conductor", margin + colW + 3, textY);
+  pdf.text("Firma cliente y/o Recibidor", margin + colW * 2 + 3, textY);
 
   // Paginación
   const pageCount = pdf.getNumberOfPages();
-  for (let i = 1; i <= pageCount; i += 1) {
+
+  for (let i = 1; i <= pageCount; i++) {
     pdf.setPage(i);
     const pageHeight = pdf.internal.pageSize.getHeight();
-    pdf.text(`Página ${i} de ${pageCount}`, pageWidth - margin, pageHeight - 8, { align: "right" });
+    pdf.setFontSize(9);
+    pdf.text(
+      `Página ${i} de ${pageCount}`,
+      pageWidth - margin,
+      pageHeight - 8,
+      { align: "right" }
+    );
   }
 
   return pdf;
