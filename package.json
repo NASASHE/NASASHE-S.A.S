@@ -1,23 +1,18 @@
 {
-  "name": "nasashe_sas",
+  "name": "Nasashe s.a.s",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:tauri": "cross-env VITE_BASE=./ vite build",
-    "build:pages": "cross-env VITE_BASE=/NASASHE-S.A.S/ vite build",
-    "preview": "vite preview",
-    "predeploy": "npm run build:pages",
-    "deploy": "gh-pages -d dist",
     "lint": "eslint .",
+    "preview": "vite preview",
     "tauri": "tauri"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.9.0",
     "@tauri-apps/plugin-dialog": "^2.4.2",
-    "@tauri-apps/plugin-shell": "^2.3.3",
     "chart.js": "^4.5.1",
     "firebase": "^12.5.0",
     "jspdf": "^3.0.3",
@@ -35,7 +30,6 @@
     "@types/react": "^19.1.16",
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.0.4",
-    "cross-env": "^10.1.0",
     "eslint": "^9.36.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.22",
