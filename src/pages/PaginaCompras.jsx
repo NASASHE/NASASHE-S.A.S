@@ -14,6 +14,7 @@ import './PaginaCompras.css';
 import { generarTextoTicketCompra } from '../utils/generarTickets';
 import { imprimirTicketEnNavegador } from '../utils/imprimirTicket';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { resolveAssetPath } from '../utils/assetPath';
 
 // ¡AÑADE ESTA LÍNEA! (Con la variable correcta de v2)
 const isTauriEnvironment = () => typeof window !== 'undefined' && Boolean(window.__TAURI_INTERNALS__);
@@ -121,13 +122,13 @@ function PaginaCompras() {
       setPrecioArticuloManual('');
     }
     if (id === 'otros') {
-      setImagenPreviewUrl('/icons/OTRO.jpg');
+      setImagenPreviewUrl(resolveAssetPath('icons/OTRO.jpg'));
       return;
     }
     if (id) {
       const articulo = articulos.find(a => a.id === id);
       if (articulo && articulo.imagenUrl) {
-        setImagenPreviewUrl(articulo.imagenUrl);
+        setImagenPreviewUrl(resolveAssetPath(articulo.imagenUrl));
       } else {
         setImagenPreviewUrl('');
       }
