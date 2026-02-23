@@ -1,18 +1,22 @@
-// src/main.jsx
-import React from "react";
-import ReactDOM from "react-dom/client";
-import App from "./App.jsx";
-import "./index.css";
+﻿// src/main.jsx
 
-import { HashRouter } from "react-router-dom";
-import { CajaProvider } from "./context/CajaContext";
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
+import App from './App.jsx';
+import './index.css';
+import { CajaProvider } from './context/CajaContext';
 
-ReactDOM.createRoot(document.getElementById("root")).render(
+// En dev la app vive en '/', en produccion en '/NASASHE-SAS/'.
+const routerBasename =
+  import.meta.env.BASE_URL === '/' ? undefined : import.meta.env.BASE_URL.replace(/\/$/, '');
+
+ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <CajaProvider>
-      <HashRouter>
+      <BrowserRouter basename={routerBasename}>
         <App />
-      </HashRouter>
+      </BrowserRouter>
     </CajaProvider>
-  </React.StrictMode>
+  </React.StrictMode>,
 );

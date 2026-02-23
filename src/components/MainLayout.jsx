@@ -1,69 +1,50 @@
 // src/components/MainLayout.jsx
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Outlet, Navigate } from 'react-router-dom';
-import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '../firebase';
-
 import Header from './Header';
 import Footer from './Footer';
-import ModalBase from './ModalBase';
-
 import { useCaja } from '../context/CajaContext';
 
+// 1. ¡Importamos nuestro nuevo Modal!
+import ModalBase from './ModalBase';
+
 function MainLayout() {
-  const {
-    currentUser,
-    setCurrentUser,      // ✅ NECESARIO en el context
-    baseEstablecida,
-    baseGuardada,
-    establecerBase,
+  
+  // 2. Traemos los nuevos estados del cerebro
+  const { 
+    currentUser, 
+    baseEstablecida, 
+    baseGuardada, 
+    establecerBase 
   } = useCaja();
 
-  const [authChecked, setAuthChecked] = useState(false);
+  // --- Lógica de Protección ---
 
-  // ✅ 1) Esperar a Firebase Auth (producción / GitHub Pages)
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      // user = null si no hay sesión
-      setCurrentUser(user);
-      setAuthChecked(true);
-    });
-
-    return () => unsubscribe();
-  }, [setCurrentUser]);
-
-  // ✅ Mientras Firebase responde, mostramos loading
-  if (!authChecked) {
-    return (
-      <div style={{ padding: 20 }}>
-        <p>Cargando...</p>
-      </div>
-    );
-  }
-
-  // ✅ 2) Si NO hay usuario, manda al login
+  // 1. Si NO hay usuario, redirige a /login
   if (!currentUser) {
     return <Navigate to="/login" replace />;
   }
 
-  // ✅ 3) Si hay usuario pero NO base, muestra modal para base
-  if (!baseEstablecida) {
+  // 2. Si SÍ hay usuario, PERO no ha establecido la base...
+  if (currentUser && !baseEstablecida) {
+    // ¡Mostramos el Modal!
     return (
-      <ModalBase
-        baseAnterior={baseGuardada}
-        onContinuar={(monto) => establecerBase(monto)}
-        onNuevaBase={(monto) => establecerBase(monto)}
-      />
-    );
+        <ModalBase 
+          baseAnterior={baseGuardada}
+          onContinuar={(monto) => establecerBase(monto, { registrarMovimiento: false })}
+          onNuevaBase={(monto) => establecerBase(monto, { registrarMovimiento: true })}
+        />
+      );
   }
 
-  // ✅ 4) Si hay usuario y base OK, muestra app
+  // 3. Si SÍ hay usuario Y SÍ estableció la base...
+  //    ¡Mostramos la aplicación!
   return (
     <div className="app-container">
       <Header />
       <main className="main-content">
-        <Outlet />
+        <Outlet /> {/* Aquí van Dashboard, Artículos, etc. */}
       </main>
       <Footer />
     </div>

@@ -1,4 +1,4 @@
-// src/pages/PaginaVentasMenores.jsx
+﻿// src/pages/PaginaVentasMenores.jsx
 
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
@@ -30,9 +30,7 @@ const descargarTxt = (contenido, nombreArchivo) => {
 };
 
 function PaginaVentasMenores() {
-
-  // 1. ¡EL ARREGLO! Traemos 'setBase' en lugar de 'sumarALaBase'␊
-  const { userProfile, base, setBase } = useCaja();
+  const { userProfile, base } = useCaja();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // --- (Estados del formulario y de la venta, sin cambios) ---
@@ -115,7 +113,6 @@ function PaginaVentasMenores() {
     );
   };
 
-  // 2. ¡LÓGICA DE GUARDADO CORREGIDA!
   const handleSaveVenta = async () => {
     if (itemsVenta.length === 0) {
       alert("No hay artículos en la venta.");
@@ -125,31 +122,19 @@ function PaginaVentasMenores() {
 
     let ventaDataParaTicket = null;
     let nuevoConsecutivoStr = "";
-    let nuevaBaseParaEstado = 0; // Para actualizar el estado local
 
     try {
       const nuevaVentaRef = doc(collection(db, "ventasMenores"));
 
       await runTransaction(db, async (transaction) => {
-        // --- 1. LEER TODO ---
         const consecRef = doc(db, "configuracion", "consecutivos");
-        const cajaRef = doc(db, "configuracion", "caja");
-        const [consecDoc, cajaDoc] = await Promise.all([
-          transaction.get(consecRef),
-          transaction.get(cajaRef)
-        ]);
+        const consecDoc = await transaction.get(consecRef);
         if (!consecDoc.exists()) throw new Error("Consecutivos no encontrados");
-        if (!cajaDoc.exists()) throw new Error("Caja no encontrada");
 
-        // --- 2. CALCULAR ---
-        const ultimoNum = consecDoc.data().ventasMenores;
+        const ultimoNum = consecDoc.data().ventasMenores ?? 0;
         const nuevoNum = ultimoNum + 1;
         nuevoConsecutivoStr = formatConsecutivo(nuevoNum, "FAVMI");
-        
-        const baseActual = cajaDoc.data().baseActual;
-        const nuevaBase = baseActual + totalVenta; // ¡SUMAMOS A LA BASE!
-        nuevaBaseParaEstado = nuevaBase; // Guardamos para React
-        
+
         const clienteNombre = nombreCliente.trim().toUpperCase();
 
         const ventaData = {
@@ -162,22 +147,27 @@ function PaginaVentasMenores() {
         };
         ventaDataParaTicket = ventaData;
 
-        // --- 3. ESCRIBIR TODO ---
+        const movimientoCajaRef = doc(collection(db, "movimientos_caja"));
+
         transaction.set(nuevaVentaRef, ventaData);
         transaction.update(consecRef, { ventasMenores: nuevoNum });
-        transaction.update(cajaRef, { baseActual: nuevaBase }); // ¡SOLO SE SUMA AQUÍ!
+        transaction.set(movimientoCajaRef, {
+          tipo: "ingreso",
+          monto: totalVenta,
+          descripcion: `Venta menor ${nuevoConsecutivoStr} - ${clienteNombre || 'N/A'}`,
+          fecha: Timestamp.now(),
+          usuario: userProfile?.nombre || 'SISTEMA',
+          anulado: false,
+          referencia: {
+            coleccion: "ventasMenores",
+            id: nuevaVentaRef.id,
+            consecutivo: nuevoConsecutivoStr
+          }
+        });
       });
-
-      // --- 4. TRANSACCIÓN EXITOSA ---
-      
-      // 3. ¡EL ARREGLO!
-      //    Ya no llamamos a 'sumarALaBase'.
-      //    Actualizamos el estado local de React con 'setBase'.
-      setBase(nuevaBaseParaEstado);
 
       setVentaReciente(ventaDataParaTicket);
       setNombreCliente('');
-
     } catch (error) {
       console.error("Error al guardar la venta: ", error);
       alert(`Error al guardar: ${error.message}`);
@@ -415,3 +405,5 @@ function PaginaVentasMenores() {
 
 
 export default PaginaVentasMenores;
+
+

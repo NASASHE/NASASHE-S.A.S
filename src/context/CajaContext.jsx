@@ -1,84 +1,98 @@
-// src/context/CajaContext.jsx
+﻿// src/context/CajaContext.jsx
 
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { auth, db } from '../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import {
+  addDoc,
+  collection,
   doc,
   getDoc,
-  updateDoc,
-  runTransaction,
-  onSnapshot
+  onSnapshot,
+  Timestamp,
+  updateDoc
 } from 'firebase/firestore';
 
 const CajaContext = createContext();
 
-// Definimos las referencias una sola vez
-const cajaDocRef = doc(db, "configuracion", "caja");
+const movimientosCajaRef = collection(db, "movimientos_caja");
 const consecDocRef = doc(db, "configuracion", "consecutivos");
 
-const getInitialBaseEstablecida = () => {
-  return sessionStorage.getItem('baseEstablecida') === 'true';
+const getInitialBaseEstablecida = () => sessionStorage.getItem('baseEstablecida') === 'true';
+
+const toNumber = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const calcularSaldoDesdeSnapshot = (snapshot) => {
+  let saldo = 0;
+
+  snapshot.forEach((docSnap) => {
+    const data = docSnap.data();
+    if (data?.anulado === true) return;
+
+    const monto = toNumber(data?.monto);
+    if (data?.tipo === 'ingreso') {
+      saldo += Math.abs(monto);
+      return;
+    }
+    if (data?.tipo === 'egreso') {
+      saldo -= Math.abs(monto);
+      return;
+    }
+    if (data?.tipo === 'ajuste') {
+      saldo += monto;
+    }
+  });
+
+  return saldo;
 };
 
 export function CajaProvider({ children }) {
-
   const [base, setBase] = useState(0);
   const [baseGuardada, setBaseGuardada] = useState(0);
   const [consecutivos, setConsecutivos] = useState(0);
   const [consecutivosData, setConsecutivosData] = useState({});
   const [baseEstablecida, setBaseEstablecida] = useState(getInitialBaseEstablecida);
   const [currentUser, setCurrentUser] = useState(null);
-
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [userProfile, setUserProfile] = useState(null);
 
   useEffect(() => {
-
     let unsubscribeCaja = () => {};
     let unsubscribeConsec = () => {};
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
-
-      // Limpiamos listeners anteriores cada vez que el usuario cambia
       unsubscribeCaja();
       unsubscribeConsec();
 
       if (user) {
         try {
-          // 1) Cargar perfil
           const userDocRef = doc(db, "usuarios", user.uid);
           const userDocSnap = await getDoc(userDocRef);
-
           if (userDocSnap.exists()) {
             setUserProfile(userDocSnap.data());
           } else {
-            console.error("No se encontró el perfil de usuario en Firestore.");
+            console.error("No se encontro el perfil de usuario en Firestore.");
             setUserProfile(null);
           }
 
-          // 2) Listener CAJA
           unsubscribeCaja = onSnapshot(
-            cajaDocRef,
-            (docSnap) => {
-              if (docSnap.exists()) {
-                const baseDeFirebase = docSnap.data().baseActual ?? 0;
-                setBaseGuardada(baseDeFirebase);
-
-                if (getInitialBaseEstablecida()) {
-                  setBase(baseDeFirebase);
-                }
-              } else {
-                alert("Error de Configuración: No se encontró el documento 'caja'.");
+            movimientosCajaRef,
+            (snapshot) => {
+              const saldoCalculado = calcularSaldoDesdeSnapshot(snapshot);
+              setBaseGuardada(saldoCalculado);
+              if (getInitialBaseEstablecida()) {
+                setBase(saldoCalculado);
               }
             },
             (error) => {
-              console.error("Error al escuchar la caja: ", error);
+              console.error("Error al escuchar movimientos de caja: ", error);
             }
           );
 
-          // 3) Listener CONSECUTIVOS
           unsubscribeConsec = onSnapshot(
             consecDocRef,
             (docSnap) => {
@@ -87,20 +101,17 @@ export function CajaProvider({ children }) {
                 setConsecutivos(data.compras ?? 0);
                 setConsecutivosData(data);
               } else {
-                alert("Error de Configuración: No se encontró el documento 'consecutivos'.");
+                alert("Error de configuracion: no se encontro el documento 'consecutivos'.");
               }
             },
             (error) => {
               console.error("Error al escuchar consecutivos: ", error);
             }
           );
-
         } catch (error) {
           console.error("Error al cargar datos iniciales: ", error);
         }
-
       } else {
-        // Limpieza si el usuario cierra sesión
         setBase(0);
         setBaseGuardada(0);
         setBaseEstablecida(false);
@@ -118,38 +129,105 @@ export function CajaProvider({ children }) {
     };
   }, []);
 
-  // --- Funciones ---
-  const establecerBase = async (monto) => {
+  const getUsuarioMovimiento = () =>
+    userProfile?.nombre || currentUser?.displayName || currentUser?.email || 'SISTEMA';
+
+  const registrarMovimientoCaja = async ({
+    tipo,
+    monto,
+    descripcion = '',
+    referencia = null
+  }) => {
     const montoNum = Number(monto);
-    try {
-      await updateDoc(cajaDocRef, { baseActual: montoNum });
-      setBase(montoNum);
-      setBaseEstablecida(true);
-      sessionStorage.setItem('baseEstablecida', 'true');
-    } catch (error) {
-      console.error("Error al guardar la base en Firebase:", error);
-      alert("¡Error al guardar la base!");
+    if (!Number.isFinite(montoNum)) {
+      throw new Error("El monto del movimiento no es valido.");
     }
+
+    if ((tipo === 'ingreso' || tipo === 'egreso') && montoNum <= 0) {
+      throw new Error("El monto debe ser mayor que cero.");
+    }
+
+    if (tipo === 'ajuste' && montoNum === 0) {
+      throw new Error("El ajuste no puede ser cero.");
+    }
+
+    const payload = {
+      tipo,
+      monto: tipo === 'ajuste' ? montoNum : Math.abs(montoNum),
+      descripcion: descripcion.trim(),
+      fecha: Timestamp.now(),
+      usuario: getUsuarioMovimiento(),
+      anulado: false
+    };
+
+    if (referencia?.coleccion && referencia?.id) {
+      payload.referencia = referencia;
+    }
+
+    await addDoc(movimientosCajaRef, payload);
   };
 
-  const restarDeLaBase = async (monto) => {
+  const anularMovimientoCaja = async (movimientoId, motivo = '') => {
+    if (!movimientoId) {
+      throw new Error("Debe indicar el ID del movimiento a anular.");
+    }
+
+    const movimientoRef = doc(db, "movimientos_caja", movimientoId);
+    await updateDoc(movimientoRef, {
+      anulado: true,
+      motivoAnulacion: motivo.trim() || 'Sin motivo',
+      fechaAnulacion: Timestamp.now(),
+      usuarioAnulacion: getUsuarioMovimiento()
+    });
+  };
+
+  const establecerBase = async (monto, options = {}) => {
+    const { registrarMovimiento = true } = options;
     const montoNum = Number(monto);
-    if (Number.isNaN(montoNum) || montoNum <= 0) {
-      alert("El monto a restar debe ser mayor que cero.");
+
+    if (!Number.isFinite(montoNum) || montoNum < 0) {
+      alert("Ingresa un monto valido de base.");
       return;
     }
 
     try {
-      await runTransaction(db, async (transaction) => {
-        const cajaSnapshot = await transaction.get(cajaDocRef);
-        if (!cajaSnapshot.exists()) throw new Error("No se encontró la configuración de caja.");
+      if (registrarMovimiento) {
+        const diferencia = montoNum - baseGuardada;
+        if (diferencia !== 0) {
+          await registrarMovimientoCaja({
+            tipo: 'ajuste',
+            monto: diferencia,
+            descripcion: "Ajuste manual de base de caja"
+          });
+        }
+      }
 
-        const baseActual = cajaSnapshot.data().baseActual || 0;
-        if (montoNum > baseActual) throw new Error("El monto a restar supera la base actual en caja.");
+      setBase(montoNum);
+      setBaseEstablecida(true);
+      sessionStorage.setItem('baseEstablecida', 'true');
+    } catch (error) {
+      console.error("Error al establecer la base:", error);
+      alert(`No se pudo establecer la base: ${error.message}`);
+    }
+  };
 
-        const nuevaBase = baseActual - montoNum;
-        transaction.update(cajaDocRef, { baseActual: nuevaBase });
-        setBase(nuevaBase);
+  const restarDeLaBase = async (monto, descripcion = 'Salida manual de caja') => {
+    const montoNum = Number(monto);
+    if (!Number.isFinite(montoNum) || montoNum <= 0) {
+      alert("El monto a restar debe ser mayor que cero.");
+      return;
+    }
+
+    if (montoNum > base) {
+      alert("El monto a restar supera la base actual.");
+      return;
+    }
+
+    try {
+      await registrarMovimientoCaja({
+        tipo: 'egreso',
+        monto: montoNum,
+        descripcion
       });
     } catch (error) {
       console.error("Error al restar de la base:", error);
@@ -157,22 +235,18 @@ export function CajaProvider({ children }) {
     }
   };
 
-  const sumarALaBase = async (monto) => {
+  const sumarALaBase = async (monto, descripcion = 'Ingreso manual de caja') => {
     const montoNum = Number(monto);
-    if (Number.isNaN(montoNum) || montoNum <= 0) {
+    if (!Number.isFinite(montoNum) || montoNum <= 0) {
       alert("El monto a agregar debe ser mayor que cero.");
       return;
     }
 
     try {
-      await runTransaction(db, async (transaction) => {
-        const cajaSnapshot = await transaction.get(cajaDocRef);
-        if (!cajaSnapshot.exists()) throw new Error("No se encontró la configuración de caja.");
-
-        const baseActual = cajaSnapshot.data().baseActual || 0;
-        const nuevaBase = baseActual + montoNum;
-        transaction.update(cajaDocRef, { baseActual: nuevaBase });
-        setBase(nuevaBase);
+      await registrarMovimientoCaja({
+        tipo: 'ingreso',
+        monto: montoNum,
+        descripcion
       });
     } catch (error) {
       console.error("Error al sumar a la base:", error);
@@ -180,7 +254,6 @@ export function CajaProvider({ children }) {
     }
   };
 
-  // ✅ VALUE (CORREGIDO): ahora sí exponemos setCurrentUser
   const value = {
     base,
     baseGuardada,
@@ -188,21 +261,18 @@ export function CajaProvider({ children }) {
     establecerBase,
     restarDeLaBase,
     sumarALaBase,
-
+    registrarMovimientoCaja,
+    anularMovimientoCaja,
     currentUser,
-    setCurrentUser,     // ✅ AÑADIDO
-
     loadingAuth,
     userProfile,
     setBase,
-
     consecutivos,
-    consecutivosData,
+    consecutivosData
   };
 
-  // ✅ Mejor que retornar null (pantalla blanca)
   if (loadingAuth) {
-    return <div style={{ padding: 20 }}>Cargando...</div>;
+    return null;
   }
 
   return (

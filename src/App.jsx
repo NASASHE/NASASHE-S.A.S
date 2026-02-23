@@ -1,10 +1,10 @@
 // src/App.jsx
 
 import './App.css';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Outlet } from 'react-router-dom';
 import MainLayout from './components/MainLayout';
 
-// Páginas
+// IMPORTAMOS las páginas
 import Dashboard from './pages/Dashboard';
 import PaginaArticulos from './pages/PaginaArticulos';
 import PaginaProveedores from './pages/PaginaProveedores';
@@ -16,17 +16,26 @@ import PaginaLogin from './pages/PaginaLogin';
 import PaginaVentasMenores from './pages/PaginaVentasMenores';
 import PaginaUsuarios from './pages/PaginaUsuarios';
 import PaginaRemisiones from './pages/PaginaRemisiones';
+
+// --- ¡PASO 3.1: AÑADE ESTA LÍNEA! ---
 import PaginaImpresion from './pages/PaginaImpresion';
 import PaginaConfiguracion from './pages/PaginaConfiguracion';
+
 
 function App() {
   return (
     <Routes>
-      {/* ✅ RUTAS PÚBLICAS */}
-      <Route path="/login" element={<PaginaLogin />} />
-      <Route path="/imprimir" element={<PaginaImpresion />} />
+      
+      {/* --- RUTAS PÚBLICAS Y DE UTILIDAD --- */}
+      <Route element={<Outlet />}>
+        <Route path="/login" element={<PaginaLogin />} />
+        
+        {/* --- ¡PASO 3.2: AÑADE ESTA LÍNEA! --- */}
+        <Route path="/imprimir" element={<PaginaImpresion />} />
+        
+      </Route>
 
-      {/* ✅ RUTAS PRIVADAS (PROTEGIDAS) */}
+      {/* --- RUTAS PRIVADAS (Protegidas) --- */}
       <Route element={<MainLayout />}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/articulos" element={<PaginaArticulos />} />
@@ -40,6 +49,7 @@ function App() {
         <Route path="/remisiones" element={<PaginaRemisiones />} />
         <Route path="/configuracion" element={<PaginaConfiguracion />} />
       </Route>
+
     </Routes>
   );
 }

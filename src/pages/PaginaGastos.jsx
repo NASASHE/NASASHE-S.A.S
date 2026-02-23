@@ -1,29 +1,28 @@
-// src/pages/PaginaGastos.jsx
+﻿// src/pages/PaginaGastos.jsx
 
 import React, { useState } from 'react';
 import { db } from '../firebase';
-import { 
-  collection, 
-  doc, 
-  Timestamp, 
-  runTransaction 
+import {
+  collection,
+  doc,
+  Timestamp,
+  runTransaction
 } from 'firebase/firestore';
 import { useCaja } from '../context/CajaContext';
-import './PaginaGastos.css'; // ¡Importamos el nuevo CSS!
-// ¡Importamos la NUEVA función de ticket!
+import './PaginaGastos.css';
 import { generarTextoTicketGasto } from '../utils/generarTickets';
 import { imprimirTicketEnNavegador } from '../utils/imprimirTicket';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
+
 const isTauriEnvironment = () => typeof window !== 'undefined' && Boolean(window.__TAURI_INTERNALS__);
 
 const formatConsecutivo = (num, prefix) => {
   return `${prefix}${String(num).padStart(5, '0')}`;
 };
 
-// Función de Descarga
 const descargarTxt = (contenido, nombreArchivo) => {
-  const element = document.createElement("a");
-  const file = new Blob([contenido], {type: 'text/plain;charset=utf-8'});
+  const element = document.createElement('a');
+  const file = new Blob([contenido], { type: 'text/plain;charset=utf-8' });
   element.href = URL.createObjectURL(file);
   element.download = `${nombreArchivo}.txt`;
   document.body.appendChild(element);
@@ -32,152 +31,84 @@ const descargarTxt = (contenido, nombreArchivo) => {
 };
 
 function PaginaGastos() {
-  // ¡Traemos 'restarDeLaBase' y 'setBase'!
-  const { userProfile, base, restarDeLaBase, setBase } = useCaja();
+  const { userProfile, base } = useCaja();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // --- Estados del formulario ---
   const [descripcion, setDescripcion] = useState('');
   const [monto, setMonto] = useState('');
-  
-  // --- Estado Post-Guardado ---
-  const [gastoReciente, setGastoReciente] = useState(null); 
 
-  
-  // --- Guardar Gasto (¡Lógica Transaccional!) ---
+  const [gastoReciente, setGastoReciente] = useState(null);
+
   const handleSaveGasto = async () => {
     const montoNum = Number(monto);
-    if (!descripcion || montoNum <= 0) {
-      alert("Debe ingresar una descripción y un monto válido.");
+    const descripcionLimpia = descripcion.trim();
+
+    if (!descripcionLimpia || montoNum <= 0) {
+      alert('Debe ingresar una descripción y un monto válido.');
       return;
     }
+
     if (montoNum > base) {
-      alert("¡Error! El monto del gasto no puede superar la base en caja.");
+      alert('Error: el monto del gasto no puede superar la base en caja.');
       return;
     }
+
     setIsSubmitting(true);
 
-    let gastoDataParaTicket = null;
-    let nuevoConsecutivoStr = "";
-
     try {
-      // Usaremos dos transacciones separadas para seguridad
-      // 1. Restar de la base (Transacción del Context)
-      await restarDeLaBase(montoNum);
-      
-      // 2. Guardar Gasto y Consecutivo (Transacción 2)
-      const nuevoGastoRef = doc(collection(db, "gastos"));
+      const nuevoGastoRef = doc(collection(db, 'gastos'));
+      let gastoDataParaTicket = null;
+
       await runTransaction(db, async (transaction) => {
-        const consecRef = doc(db, "configuracion", "consecutivos");
+        const consecRef = doc(db, 'configuracion', 'consecutivos');
         const consecDoc = await transaction.get(consecRef);
-        if (!consecDoc.exists()) throw new Error("Consecutivos no encontrados");
-        
-        const ultimoNum = consecDoc.data().gastos; // <-- 'gastos'
+
+        if (!consecDoc.exists()) {
+          throw new Error('Consecutivos no encontrados.');
+        }
+
+        const ultimoNum = consecDoc.data().gastos ?? 0;
         const nuevoNum = ultimoNum + 1;
-        nuevoConsecutivoStr = formatConsecutivo(nuevoNum, "GAS"); // <-- 'GAS'
+        const nuevoConsecutivoStr = formatConsecutivo(nuevoNum, 'GAS');
 
         const gastoData = {
           consecutivo: nuevoConsecutivoStr,
-          descripcion: descripcion,
-          monto: montoNum,
-          fecha: Timestamp.now(),
-          usuario: userProfile?.nombre || 'SISTEMA'
-        };
-        gastoDataParaTicket = gastoData;
-        
-        transaction.set(nuevoGastoRef, gastoData);
-        transaction.update(consecRef, { gastos: nuevoNum }); // <-- 'gastos'
-      });
-
-      // --- 4. TRANSACCIÓN EXITOSA ---
-      setGastoReciente(gastoDataParaTicket);
-      setDescripcion('');
-      setMonto('');
-
-    } catch (error) {
-      console.error("Error al guardar el gasto: ", error);
-      alert(`Error al guardar: ${error.message}`);
-      // Si la segunda transacción falla, debemos "revertir" la primera
-      // (Devolver el dinero a la base)
-      // Esta es una lógica de compensación simple.
-      // ¡Pero 'restarDeLaBase' ya valida! Si falla, no resta.
-      // Si la transacción 2 falla, la base SÍ se restó.
-      // ¡ERROR EN MI LÓGICA ANTERIOR!
-      // Debemos hacer TODO en UNA transacción.
-    }
-    setIsSubmitting(false);
-  };
-  
-  // --- ¡handleSaveGasto CORREGIDO CON 1 SOLA TRANSACCIÓN! ---
-  const handleSaveGastoCorregido = async () => {
-    const montoNum = Number(monto);
-    if (!descripcion || montoNum <= 0) {
-      alert("Debe ingresar una descripción y un monto válido.");
-      return;
-    }
-    if (montoNum > base) {
-      alert("¡Error! El monto del gasto no puede superar la base en caja.");
-      return;
-    }
-    setIsSubmitting(true);
-
-    let gastoDataParaTicket = null;
-    let nuevaBaseParaEstado = 0;
-
-    try {
-      const nuevoGastoRef = doc(collection(db, "gastos"));
-
-      await runTransaction(db, async (transaction) => {
-        // --- 1. LEER TODO ---
-        const consecRef = doc(db, "configuracion", "consecutivos");
-        const cajaRef = doc(db, "configuracion", "caja");
-        const [consecDoc, cajaDoc] = await Promise.all([
-          transaction.get(consecRef),
-          transaction.get(cajaRef)
-        ]);
-        if (!consecDoc.exists()) throw new Error("Consecutivos no encontrados");
-        if (!cajaDoc.exists()) throw new Error("Caja no encontrada");
-
-        // --- 2. CALCULAR ---
-        const ultimoNum = consecDoc.data().gastos;
-        const nuevoNum = ultimoNum + 1;
-        const nuevoConsecutivoStr = formatConsecutivo(nuevoNum, "GAS");
-        
-        const baseActual = cajaDoc.data().baseActual;
-        const nuevaBase = baseActual - montoNum; // ¡RESTAMOS DE LA BASE!
-        if (nuevaBase < 0) throw new Error("Fondos insuficientes en caja.");
-        nuevaBaseParaEstado = nuevaBase; // Guardamos para React
-        
-        const gastoData = {
-          consecutivo: nuevoConsecutivoStr,
-          descripcion: descripcion,
+          descripcion: descripcionLimpia,
           monto: montoNum,
           fecha: Timestamp.now(),
           usuario: userProfile?.nombre || 'SISTEMA'
         };
         gastoDataParaTicket = gastoData;
 
-        // --- 3. ESCRIBIR TODO ---
+        const movimientoCajaRef = doc(collection(db, 'movimientos_caja'));
+
         transaction.set(nuevoGastoRef, gastoData);
         transaction.update(consecRef, { gastos: nuevoNum });
-        transaction.update(cajaRef, { baseActual: nuevaBase }); // ¡Restamos aquí!
+        transaction.set(movimientoCajaRef, {
+          tipo: 'egreso',
+          monto: montoNum,
+          descripcion: `Gasto ${nuevoConsecutivoStr} - ${descripcionLimpia}`,
+          fecha: Timestamp.now(),
+          usuario: userProfile?.nombre || 'SISTEMA',
+          anulado: false,
+          referencia: {
+            coleccion: 'gastos',
+            id: nuevoGastoRef.id,
+            consecutivo: nuevoConsecutivoStr
+          }
+        });
       });
 
-      // --- 4. TRANSACCIÓN EXITOSA ---
-      setBase(nuevaBaseParaEstado); // Actualizamos el estado local
       setGastoReciente(gastoDataParaTicket);
       setDescripcion('');
       setMonto('');
-
     } catch (error) {
-      console.error("Error al guardar el gasto: ", error);
+      console.error('Error al guardar el gasto: ', error);
       alert(`Error al guardar: ${error.message}`);
     }
+
     setIsSubmitting(false);
   };
-
-
-  // --- Lógica de Impresión/Descarga (¡ACTUALIZADA!) ---
 
   const printGastoEnNavegador = (gastoData) => {
     const textoTicket = generarTextoTicketGasto(gastoData, userProfile);
@@ -187,7 +118,7 @@ function PaginaGastos() {
     });
 
     if (!exito) {
-      alert('No se pudo preparar la impresión del comprobante en el navegador. Verifica la configuración de impresión e inténtalo nuevamente.');
+      alert('No se pudo preparar la impresión del comprobante en el navegador.');
     }
   };
 
@@ -200,13 +131,13 @@ function PaginaGastos() {
     } else {
       localStorage.setItem('ticketData', JSON.stringify(gastoReciente));
       localStorage.setItem('ticketUser', JSON.stringify(userProfile));
-      localStorage.setItem('ticketType', 'gasto'); // <-- Tipo 'gasto'
+      localStorage.setItem('ticketType', 'gasto');
 
       const label = `ticket-gasto-${gastoReciente.consecutivo.replace(/\s/g, '-')}`;
       const webview = new WebviewWindow(label, {
         url: '/imprimir',
         title: `Comprobante ${gastoReciente.consecutivo}`,
-        width: 310, 
+        width: 310,
         height: 600,
       });
 
@@ -236,7 +167,6 @@ function PaginaGastos() {
     setMonto('');
     setGastoReciente(null);
   };
-  
 
   return (
     <div className="pagina-gastos">
@@ -244,51 +174,47 @@ function PaginaGastos() {
       <div>
         Base actual: <strong>${base.toLocaleString('es-CO')}</strong>
       </div>
-      
+
       <div className="layout-gastos">
-        
-        {/* --- FORMULARIO --- */}
         <div className="formulario-gasto">
           <h2>Datos del Gasto</h2>
           <div className="form-grupo">
             <label htmlFor="descripcion">Descripción:</label>
-            <textarea 
-              id="descripcion" 
+            <textarea
+              id="descripcion"
               rows="4"
               value={descripcion}
               onChange={(e) => setDescripcion(e.target.value)}
-              disabled={gastoReciente}
+              disabled={Boolean(gastoReciente)}
             ></textarea>
           </div>
           <div className="form-grupo">
             <label htmlFor="monto">Monto ($):</label>
-            <input 
-              id="monto" 
+            <input
+              id="monto"
               type="number"
               value={monto}
               onChange={(e) => setMonto(e.target.value)}
-              disabled={gastoReciente}
+              disabled={Boolean(gastoReciente)}
             />
           </div>
         </div>
 
-        {/* --- VISTA PREVIA Y BOTONES --- */}
         <div className="vista-previa-gasto">
           <div>
             <h2>Resumen de Salida</h2>
             <div className="resumen-gasto">
               <div>Descripción: {gastoReciente ? gastoReciente.descripcion : descripcion}</div>
               <div className="monto">
-                - ${(gastoReciente ? gastoReciente.monto : Number(monto)).toLocaleString('es-CO')}
+                - ${(gastoReciente ? gastoReciente.monto : Number(monto || 0)).toLocaleString('es-CO')}
               </div>
             </div>
           </div>
 
           <div className="botones-accion">
             {gastoReciente ? (
-              // --- VISTA POST-GUARDADO ---
               <>
-                <p className="gasto-exitoso">¡Gasto {gastoReciente.consecutivo} guardado!</p>
+                <p className="gasto-exitoso">Gasto {gastoReciente.consecutivo} guardado.</p>
                 <button type="button" onClick={handleImprimir} className="btn-imprimir-ticket">
                   Imprimir Comprobante (SALIDA)
                 </button>
@@ -297,14 +223,13 @@ function PaginaGastos() {
                 </button>
               </>
             ) : (
-              // --- VISTA ANTES DE GUARDAR ---
-              <button 
-                type="button" 
-                onClick={handleSaveGastoCorregido} // ¡Usamos la función corregida!
+              <button
+                type="button"
+                onClick={handleSaveGasto}
                 className="btn-guardar-gasto"
                 disabled={isSubmitting || !descripcion || !monto}
               >
-                {isSubmitting ? "Guardando..." : "Guardar Gasto"}
+                {isSubmitting ? 'Guardando...' : 'Guardar Gasto'}
               </button>
             )}
           </div>

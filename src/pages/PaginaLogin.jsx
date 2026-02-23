@@ -1,19 +1,72 @@
-// src/pages/PaginaLogin.jsx
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { auth, db } from "../firebase";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { collection, query, where, getDocs, limit } from "firebase/firestore";
-import "./PaginaLogin.css";
+﻿// src/pages/PaginaLogin.jsx
+
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import {
+  collection,
+  getDocsFromServer,
+  query,
+  where
+} from 'firebase/firestore';
+import { auth, db } from '../firebase';
+import './PaginaLogin.css';
+
+const normalizar = (valor) => String(valor || '').trim().toUpperCase();
+const normalizarEmail = (valor) => String(valor || '').trim().toLowerCase();
+
+async function resolverEmailPorIdentificador(identificadorInput) {
+  const identificador = identificadorInput.trim();
+  if (!identificador) {
+    throw new Error('Usuario no encontrado.');
+  }
+
+  const usuariosRef = collection(db, 'usuarios');
+  const nombreNormalizado = normalizar(identificador);
+
+  // Intento 1: coincidencia exacta por campo principal.
+  const exactaPorNombre = await getDocsFromServer(
+    query(usuariosRef, where('nombre', '==', nombreNormalizado))
+  );
+
+  if (!exactaPorNombre.empty) {
+    const email = exactaPorNombre.docs[0].data()?.email;
+    if (email) return email;
+  }
+
+  // Intento 2: compatibilidad con otros campos o nombres no normalizados.
+  const todos = await getDocsFromServer(usuariosRef);
+  const emailPorBusquedaFlexible = todos.docs
+    .map((docSnap) => docSnap.data())
+    .find((data) => {
+      const candidatos = [
+        data?.nombre,
+        data?.nombreUsuario,
+        data?.username,
+        data?.usuario
+      ].map(normalizar);
+
+      return candidatos.includes(nombreNormalizado);
+    })?.email;
+
+  if (emailPorBusquedaFlexible) {
+    return emailPorBusquedaFlexible;
+  }
+
+  // Intento 3: si escribieron email directamente.
+  if (identificador.includes('@')) {
+    return normalizarEmail(identificador);
+  }
+
+  throw new Error('Usuario no encontrado.');
+}
 
 function PaginaLogin() {
-  const [usuario, setUsuario] = useState(""); // puede ser usuario, nombre o email
-  const [password, setPassword] = useState("");
+  const [nombre, setNombre] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-
-  const normalizeKey = (v) => (v || "").trim().toUpperCase();
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -21,63 +74,22 @@ function PaginaLogin() {
     setLoading(true);
 
     try {
-      const input = usuario.trim();
-      if (!input || !password) throw new Error("Completa los campos.");
-
-      // ✅ Si escriben un correo, login directo
-      if (input.includes("@")) {
-        await signInWithEmailAndPassword(auth, input.toLowerCase(), password);
-        navigate("/");
-        return;
-      }
-
-      const key = normalizeKey(input);
-
-      const usuariosPubRef = collection(db, "usuarios_publicos");
-
-      // ✅ 1) Buscar por USUARIO
-      let q = query(usuariosPubRef, where("usuario", "==", key), limit(1));
-      let snap = await getDocs(q);
-
-      // ✅ 2) Si no existe por usuario, buscar por NOMBRE (nombreKey)
-      if (snap.empty) {
-        q = query(usuariosPubRef, where("nombreKey", "==", key), limit(1));
-        snap = await getDocs(q);
-      }
-
-      if (snap.empty) {
-        throw new Error("Usuario no encontrado.");
-      }
-
-      const data = snap.docs[0].data();
-
-      // ✅ 3) Validar activo
-      if (data.activo === false) {
-        throw new Error("Usuario desactivado.");
-      }
-
-      const emailReal = (data.email || "").toLowerCase();
-
-      if (!emailReal) {
-        throw new Error("Usuario sin email asociado (usuarios_publicos).");
-      }
-
+      const emailReal = await resolverEmailPorIdentificador(nombre);
       await signInWithEmailAndPassword(auth, emailReal, password);
-      navigate("/");
+      navigate('/');
     } catch (err) {
-      console.error(err);
-
-      if (err.message === "Usuario no encontrado.") {
-        setError("Usuario o nombre incorrecto.");
-      } else if (err.message === "Usuario desactivado.") {
-        setError("Usuario desactivado. Contacte al administrador.");
-      } else if (err.code === "auth/invalid-credential") {
-        setError("Contraseña incorrecta.");
-      } else if (err.code === "permission-denied") {
-        setError("No hay permisos para leer usuarios_publicos. Revisa Firestore Rules.");
+      if (err?.code === 'permission-denied' || err?.code === 'firestore/permission-denied') {
+        setError('No hay permiso para leer usuarios en Firestore.');
+      } else if (err?.message === 'Usuario no encontrado.') {
+        setError('Nombre de usuario incorrecto.');
+      } else if (err?.code === 'auth/invalid-credential' || err?.code === 'auth/wrong-password') {
+        setError('Contraseña incorrecta.');
+      } else if (err?.code === 'auth/user-not-found') {
+        setError('Usuario no existe en Authentication.');
       } else {
-        setError("Error al iniciar sesión. Intente de nuevo.");
+        setError('Error al iniciar sesión. Intente de nuevo.');
       }
+      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -87,20 +99,17 @@ function PaginaLogin() {
     <div className="login-page-container">
       <div className="login-box">
         <h1>Iniciar Sesión</h1>
-
         <form onSubmit={handleLogin} className="login-form">
           <div className="form-grupo">
-            <label htmlFor="usuario">Usuario o correo:</label>
+            <label htmlFor="nombre-usuario">Nombre de Usuario:</label>
             <input
-              id="usuario"
+              id="nombre-usuario"
               type="text"
-              value={usuario}
-              onChange={(e) => setUsuario(e.target.value)}
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
               required
-              autoComplete="username"
             />
           </div>
-
           <div className="form-grupo">
             <label htmlFor="password">Contraseña:</label>
             <input
@@ -109,12 +118,11 @@ function PaginaLogin() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              autoComplete="current-password"
             />
           </div>
 
           <button type="submit" className="login-btn" disabled={loading}>
-            {loading ? "Ingresando..." : "Ingresar"}
+            {loading ? 'Ingresando...' : 'Ingresar'}
           </button>
 
           {error && <p className="login-error">{error}</p>}
