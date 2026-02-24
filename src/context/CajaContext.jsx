@@ -19,7 +19,9 @@ import {
   formatConsecutivo,
   getBloqueRef,
   getOrCreateDeviceId,
+  getStoredDeviceAlias,
   reservarBloque,
+  setStoredDeviceAlias,
 } from '../services/consecutivos';
 
 const CajaContext = createContext();
@@ -66,6 +68,7 @@ export function CajaProvider({ children }) {
   const [consecutivosData, setConsecutivosData] = useState({});
   const [bloquesConsecutivos, setBloquesConsecutivos] = useState({});
   const [deviceId] = useState(getOrCreateDeviceId);
+  const [deviceAlias, setDeviceAlias] = useState(() => getStoredDeviceAlias(getOrCreateDeviceId()));
   const [baseEstablecida, setBaseEstablecida] = useState(getInitialBaseEstablecida);
   const [currentUser, setCurrentUser] = useState(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
@@ -88,6 +91,7 @@ export function CajaProvider({ children }) {
       unsubscribeCaja();
       unsubscribeConsec();
       clearBloqueListeners();
+      setBloquesConsecutivos({});
 
       if (user) {
         try {
@@ -132,11 +136,18 @@ export function CajaProvider({ children }) {
 
           unsubscribeBloques = Object.keys(CONSECUTIVOS_META).map((modulo) =>
             onSnapshot(
-              getBloqueRef(deviceId, modulo),
+              getBloqueRef(deviceId, modulo, user.uid),
               (docSnap) => {
+                const bloqueData = docSnap.exists() ? docSnap.data() : null;
+                const aliasRemoto = String(bloqueData?.deviceAlias || '').trim();
+                const aliasGuardado = getStoredDeviceAlias(deviceId);
+                if (aliasRemoto && aliasRemoto !== aliasGuardado) {
+                  setDeviceAlias(aliasRemoto);
+                  setStoredDeviceAlias(aliasRemoto, deviceId);
+                }
                 setBloquesConsecutivos((prev) => ({
                   ...prev,
-                  [modulo]: docSnap.exists() ? docSnap.data() : null,
+                  [modulo]: bloqueData,
                 }));
               },
               (error) => {
@@ -208,6 +219,12 @@ export function CajaProvider({ children }) {
   const getUsuarioMovimiento = () =>
     userProfile?.nombre || currentUser?.displayName || currentUser?.email || 'SISTEMA';
 
+  const actualizarAliasDispositivo = (aliasInput) => {
+    const aliasFinal = setStoredDeviceAlias(aliasInput, deviceId);
+    setDeviceAlias(aliasFinal);
+    return aliasFinal;
+  };
+
   const getBloqueNormalizado = (modulo) => {
     const raw = bloquesConsecutivos?.[modulo];
     if (!raw) return null;
@@ -232,6 +249,7 @@ export function CajaProvider({ children }) {
     modulo,
     targetDeviceId = deviceId,
     targetOwnerUid = currentUser?.uid,
+    targetDeviceAlias = deviceAlias,
     blockSize = DEFAULT_BLOCK_SIZE,
   }) => {
     if (!CONSECUTIVOS_META[modulo]) {
@@ -247,13 +265,14 @@ export function CajaProvider({ children }) {
 
     const reservado = await reservarBloque({
       deviceId: targetDeviceId,
+      deviceAlias: targetDeviceAlias,
       ownerUid: targetOwnerUid,
       modulo,
       blockSize,
       actor: getUsuarioMovimiento(),
     });
 
-    if (targetDeviceId === deviceId) {
+    if (targetDeviceId === deviceId && targetOwnerUid === currentUser?.uid) {
       setBloquesConsecutivos((prev) => ({
         ...prev,
         [modulo]: {
@@ -263,6 +282,7 @@ export function CajaProvider({ children }) {
           siguiente: reservado.siguiente,
           tamano: reservado.tamano,
           deviceId: targetDeviceId,
+          deviceAlias: targetDeviceAlias,
           ownerUid: targetOwnerUid,
           modulo,
         },
@@ -303,7 +323,7 @@ export function CajaProvider({ children }) {
     return {
       numero,
       consecutivo: formatConsecutivo(modulo, numero),
-      bloqueRef: getBloqueRef(deviceId, modulo),
+      bloqueRef: getBloqueRef(deviceId, modulo, currentUid),
     };
   };
 
@@ -446,8 +466,10 @@ export function CajaProvider({ children }) {
     consecutivosData,
     bloquesConsecutivos,
     deviceId,
+    deviceAlias,
     obtenerConsecutivoParaModulo,
     reservarBloqueParaModulo,
+    actualizarAliasDispositivo,
     isOnline,
     isSyncing
   };

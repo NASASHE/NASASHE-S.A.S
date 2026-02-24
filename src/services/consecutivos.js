@@ -43,6 +43,14 @@ export const CONSECUTIVOS_META = {
 };
 
 const DEVICE_ID_KEY = 'nasashe_device_id';
+const DEVICE_ALIAS_KEY = 'nasashe_device_alias';
+
+const getDefaultDeviceAlias = (deviceId) => {
+  const shortId = String(deviceId || '').slice(0, 8).toUpperCase();
+  return shortId ? `EQUIPO-${shortId}` : 'EQUIPO';
+};
+
+const normalizarAlias = (alias) => String(alias || '').trim();
 
 const generarDeviceId = () => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -60,10 +68,26 @@ export const getOrCreateDeviceId = () => {
   return nuevo;
 };
 
-export const getBloqueDocId = (deviceId, modulo) => `${modulo}__${deviceId}`;
+export const getStoredDeviceAlias = (deviceId = getOrCreateDeviceId()) => {
+  if (typeof window === 'undefined') return getDefaultDeviceAlias(deviceId);
+  const existente = localStorage.getItem(DEVICE_ALIAS_KEY);
+  if (existente && existente.trim()) return existente.trim();
+  return getDefaultDeviceAlias(deviceId);
+};
 
-export const getBloqueRef = (deviceId, modulo) =>
-  doc(db, BLOQUES_COLLECTION, getBloqueDocId(deviceId, modulo));
+export const setStoredDeviceAlias = (alias, deviceId = getOrCreateDeviceId()) => {
+  const aliasNormalizado = normalizarAlias(alias) || getDefaultDeviceAlias(deviceId);
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(DEVICE_ALIAS_KEY, aliasNormalizado);
+  }
+  return aliasNormalizado;
+};
+
+export const getBloqueDocId = (deviceId, modulo, ownerUid) =>
+  `${modulo}__${deviceId}__${ownerUid}`;
+
+export const getBloqueRef = (deviceId, modulo, ownerUid) =>
+  doc(db, BLOQUES_COLLECTION, getBloqueDocId(deviceId, modulo, ownerUid));
 
 const getConsecutivosRef = () => doc(db, ...CONSECUTIVOS_DOC_PATH);
 
@@ -84,6 +108,7 @@ export const formatConsecutivo = (modulo, numero) => {
 
 export const reservarBloque = async ({
   deviceId,
+  deviceAlias,
   modulo,
   blockSize = DEFAULT_BLOCK_SIZE,
   actor = 'SISTEMA',
@@ -96,10 +121,11 @@ export const reservarBloque = async ({
   if (!ownerUid || typeof ownerUid !== 'string') {
     throw new Error('No se pudo identificar el propietario del bloque (ownerUid).');
   }
+  const aliasNormalizado = normalizarAlias(deviceAlias) || getDefaultDeviceAlias(deviceId);
 
   const size = Math.max(1, normalizarNumero(blockSize) || DEFAULT_BLOCK_SIZE);
   const consecutivosRef = getConsecutivosRef();
-  const bloqueRef = getBloqueRef(deviceId, modulo);
+  const bloqueRef = getBloqueRef(deviceId, modulo, ownerUid);
 
   return runTransaction(db, async (transaction) => {
     const consecutivosSnap = await transaction.get(consecutivosRef);
@@ -120,6 +146,7 @@ export const reservarBloque = async ({
       bloqueRef,
       {
         deviceId,
+        deviceAlias: aliasNormalizado,
         ownerUid,
         modulo,
         inicio,

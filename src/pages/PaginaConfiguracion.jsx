@@ -30,7 +30,9 @@ function PaginaConfiguracion() {
     userProfile,
     currentUser,
     deviceId,
+    deviceAlias,
     reservarBloqueParaModulo,
+    actualizarAliasDispositivo,
   } = useCaja();
   const esAdmin = userProfile?.rol === 'admin';
 
@@ -49,15 +51,22 @@ function PaginaConfiguracion() {
   const [cargandoBloques, setCargandoBloques] = useState(true);
   const [mensajeBloques, setMensajeBloques] = useState('');
   const [reservandoBloque, setReservandoBloque] = useState(false);
+  const [usuarios, setUsuarios] = useState([]);
+  const [cargandoUsuarios, setCargandoUsuarios] = useState(true);
 
   const [bloqueForm, setBloqueForm] = useState({
     deviceId: '',
+    deviceAlias: '',
     ownerUid: '',
     modulo: 'ventas',
     tamano: String(DEFAULT_BLOCK_SIZE),
   });
 
   const modulos = useMemo(() => Object.keys(CONSECUTIVOS_META), []);
+  const usuariosPorUid = useMemo(
+    () => Object.fromEntries(usuarios.map((u) => [u.id, u])),
+    [usuarios],
+  );
 
   useEffect(() => {
     const cargarConsecutivos = async () => {
@@ -89,14 +98,15 @@ function PaginaConfiguracion() {
   useEffect(() => {
     if (!deviceId) return;
     setBloqueForm((prev) => {
-      if (prev.deviceId && prev.ownerUid) return prev;
+      if (prev.deviceId && prev.ownerUid && prev.deviceAlias) return prev;
       return {
         ...prev,
         deviceId: prev.deviceId || deviceId,
+        deviceAlias: prev.deviceAlias || deviceAlias || '',
         ownerUid: prev.ownerUid || currentUser?.uid || '',
       };
     });
-  }, [deviceId, currentUser?.uid]);
+  }, [deviceId, deviceAlias, currentUser?.uid]);
 
   useEffect(() => {
     if (!esAdmin) return undefined;
@@ -110,7 +120,9 @@ function PaginaConfiguracion() {
           .sort((a, b) => {
             const moduloCmp = String(a.modulo || '').localeCompare(String(b.modulo || ''));
             if (moduloCmp !== 0) return moduloCmp;
-            return String(a.deviceId || '').localeCompare(String(b.deviceId || ''));
+            const deviceCmp = String(a.deviceId || '').localeCompare(String(b.deviceId || ''));
+            if (deviceCmp !== 0) return deviceCmp;
+            return String(a.ownerUid || '').localeCompare(String(b.ownerUid || ''));
           });
 
         setBloques(items);
@@ -119,6 +131,30 @@ function PaginaConfiguracion() {
       (error) => {
         console.error('Error al escuchar bloques de consecutivos:', error);
         setCargandoBloques(false);
+      },
+    );
+
+    return () => unsubscribe();
+  }, [esAdmin]);
+
+  useEffect(() => {
+    if (!esAdmin) return undefined;
+
+    const usuariosRef = collection(db, 'usuarios');
+    const unsubscribe = onSnapshot(
+      usuariosRef,
+      (snapshot) => {
+        const items = snapshot.docs
+          .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }))
+          .sort((a, b) =>
+            String(a.nombre || a.email || a.id).localeCompare(String(b.nombre || b.email || b.id)),
+          );
+        setUsuarios(items);
+        setCargandoUsuarios(false);
+      },
+      (error) => {
+        console.error('Error al cargar usuarios para selector de bloques:', error);
+        setCargandoUsuarios(false);
       },
     );
 
@@ -178,12 +214,14 @@ function PaginaConfiguracion() {
     setMensajeBloques('');
     try {
       const tamano = toPositiveInt(bloqueForm.tamano);
+      const aliasActual = actualizarAliasDispositivo(bloqueForm.deviceAlias);
       await reservarBloqueParaModulo({
         modulo: bloqueForm.modulo,
+        targetDeviceAlias: aliasActual,
         blockSize: tamano,
       });
       setMensajeBloques(
-        `Bloque reservado para este dispositivo (${deviceId}) en ${bloqueForm.modulo}.`,
+        `Bloque reservado para este dispositivo (${aliasActual}) en ${bloqueForm.modulo}.`,
       );
     } catch (error) {
       console.error('Error al reservar bloque para dispositivo actual:', error);
@@ -200,9 +238,14 @@ function PaginaConfiguracion() {
       setMensajeBloques('Debes escribir un deviceId para reservar el bloque.');
       return;
     }
+    const targetDeviceAlias = String(bloqueForm.deviceAlias || '').trim();
+    if (!targetDeviceAlias) {
+      setMensajeBloques('Debes escribir un alias para identificar el dispositivo.');
+      return;
+    }
     const targetOwnerUid = String(bloqueForm.ownerUid || '').trim();
     if (!targetOwnerUid) {
-      setMensajeBloques('Debes escribir el ownerUid del usuario que usara ese dispositivo.');
+      setMensajeBloques('Debes seleccionar el usuario propietario del bloque.');
       return;
     }
 
@@ -216,15 +259,18 @@ function PaginaConfiguracion() {
 
     try {
       const tamano = toPositiveInt(bloqueForm.tamano);
+      const owner = usuariosPorUid[targetOwnerUid];
+      const ownerLabel = owner?.nombre || owner?.email || targetOwnerUid;
       await reservarBloque({
         deviceId: targetDeviceId,
+        deviceAlias: targetDeviceAlias,
         ownerUid: targetOwnerUid,
         modulo: bloqueForm.modulo,
         blockSize: tamano,
         actor: userProfile?.nombre || 'ADMIN',
       });
       setMensajeBloques(
-        `Bloque reservado: ${bloqueForm.modulo} para ${targetDeviceId} (owner ${targetOwnerUid}, tamano ${tamano}).`,
+        `Bloque reservado: ${bloqueForm.modulo} para ${targetDeviceAlias} (usuario ${ownerLabel}, tamano ${tamano}).`,
       );
     } catch (error) {
       console.error('Error al reservar bloque manual:', error);
@@ -297,7 +343,7 @@ function PaginaConfiguracion() {
     <div className="configuracion-container">
       <h1>Configuracion de consecutivos</h1>
       <p className="configuracion-descripcion">
-        Los consecutivos globales ahora reservan rangos para bloques por dispositivo. Cada equipo toma su bloque y puede operar offline.
+        Los consecutivos globales ahora reservan rangos para bloques por usuario y dispositivo. En la misma PC, cada usuario mantiene su propio bloque y puede operar offline.
       </p>
 
       {cargando ? (
@@ -325,10 +371,20 @@ function PaginaConfiguracion() {
       <section>
         <h2>Bloques por dispositivo</h2>
         <p>
-          Dispositivo actual: <strong>{deviceId}</strong>
+          Dispositivo actual: <strong>{deviceAlias}</strong> ({deviceId})
         </p>
 
         <form onSubmit={handleReservarBloqueManual} style={{ display: 'grid', gap: '8px', maxWidth: '720px' }}>
+          <label htmlFor="bloqueDeviceAlias">Alias del dispositivo</label>
+          <input
+            id="bloqueDeviceAlias"
+            name="deviceAlias"
+            type="text"
+            value={bloqueForm.deviceAlias}
+            onChange={handleBloqueFieldChange}
+            placeholder="Ej: CAJA PRINCIPAL"
+          />
+
           <label htmlFor="bloqueDeviceId">Device ID</label>
           <input
             id="bloqueDeviceId"
@@ -339,15 +395,20 @@ function PaginaConfiguracion() {
             placeholder="ID del dispositivo destino"
           />
 
-          <label htmlFor="bloqueOwnerUid">Owner UID</label>
-          <input
+          <label htmlFor="bloqueOwnerUid">Usuario propietario</label>
+          <select
             id="bloqueOwnerUid"
             name="ownerUid"
-            type="text"
             value={bloqueForm.ownerUid}
             onChange={handleBloqueFieldChange}
-            placeholder="UID del usuario propietario del bloque"
-          />
+          >
+            <option value="">{cargandoUsuarios ? 'Cargando usuarios...' : '-- Selecciona un usuario --'}</option>
+            {usuarios.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.nombre || u.email || u.id}
+              </option>
+            ))}
+          </select>
 
           <label htmlFor="bloqueModulo">Modulo</label>
           <select
@@ -395,8 +456,9 @@ function PaginaConfiguracion() {
               <thead>
                 <tr>
                   <th>Modulo</th>
+                  <th>Alias</th>
                   <th>Device ID</th>
-                  <th>Owner UID</th>
+                  <th>Usuario propietario</th>
                   <th>Inicio</th>
                   <th>Fin</th>
                   <th>Siguiente</th>
@@ -408,7 +470,7 @@ function PaginaConfiguracion() {
               <tbody>
                 {bloques.length === 0 ? (
                   <tr>
-                    <td colSpan="9" style={{ textAlign: 'center' }}>No hay bloques asignados.</td>
+                    <td colSpan="10" style={{ textAlign: 'center' }}>No hay bloques asignados.</td>
                   </tr>
                 ) : (
                   bloques.map((bloque) => {
@@ -416,8 +478,13 @@ function PaginaConfiguracion() {
                     return (
                       <tr key={bloque.id}>
                         <td>{bloque.modulo || 'N/A'}</td>
+                        <td>{bloque.deviceAlias || 'N/A'}</td>
                         <td>{bloque.deviceId || 'N/A'}</td>
-                        <td>{bloque.ownerUid || 'N/A'}</td>
+                        <td>
+                          {usuariosPorUid[bloque.ownerUid]
+                            ? `${usuariosPorUid[bloque.ownerUid].nombre || usuariosPorUid[bloque.ownerUid].email || bloque.ownerUid} (${bloque.ownerUid})`
+                            : (bloque.ownerUid || 'N/A')}
+                        </td>
                         <td>{estado.inicio}</td>
                         <td>{estado.fin}</td>
                         <td>{estado.siguiente}</td>
