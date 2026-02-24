@@ -25,6 +25,7 @@ service cloud.firestore {
     function bloqueValido(data) {
       return data.deviceId is string
         && data.deviceId.size() > 0
+        && (!(data.deviceAlias is string) || (data.deviceAlias.size() > 0 && data.deviceAlias.size() <= 80))
         && data.ownerUid is string
         && data.ownerUid.size() > 0
         && moduloValido(data.modulo)
