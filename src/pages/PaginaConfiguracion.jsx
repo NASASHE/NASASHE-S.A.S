@@ -257,12 +257,6 @@ function PaginaConfiguracion() {
         <p>
           Dispositivo actual: <strong>{deviceAlias}</strong> ({deviceId})
         </p>
-        <p className="configuracion-estado">
-          La reserva manual fue desactivada. El sistema asigna bloques automaticamente por usuario, dispositivo y modulo.
-        </p>
-        <p className="configuracion-estado">
-          Si hay internet, recarga bloques en segundo plano antes de agotarse. Sin internet, sigue operando con los bloques ya reservados.
-        </p>
         {cargandoUsuarios && <p className="configuracion-estado">Cargando nombres de usuarios...</p>}
 
         {cargandoBloques ? (
