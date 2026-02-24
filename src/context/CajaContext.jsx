@@ -1,6 +1,6 @@
 ﻿// src/context/CajaContext.jsx
 
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
 import { auth, db } from '../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import {
@@ -29,6 +29,8 @@ const CajaContext = createContext();
 const movimientosCajaRef = collection(db, "movimientos_caja");
 const consecDocRef = doc(db, "configuracion", "consecutivos");
 const getInitialOnlineState = () => (typeof window === 'undefined' ? true : navigator.onLine);
+const BLOQUE_MIN_DISPONIBLES = 10;
+const MODULOS_CONSECUTIVOS = Object.keys(CONSECUTIVOS_META);
 
 const getInitialBaseEstablecida = () => sessionStorage.getItem('baseEstablecida') === 'true';
 
@@ -75,6 +77,7 @@ export function CajaProvider({ children }) {
   const [userProfile, setUserProfile] = useState(null);
   const [isOnline, setIsOnline] = useState(getInitialOnlineState);
   const [isSyncing, setIsSyncing] = useState(false);
+  const reservasPreventivasRef = useRef({});
 
   useEffect(() => {
     let unsubscribeCaja = () => {};
@@ -92,6 +95,7 @@ export function CajaProvider({ children }) {
       unsubscribeConsec();
       clearBloqueListeners();
       setBloquesConsecutivos({});
+      reservasPreventivasRef.current = {};
 
       if (user) {
         try {
@@ -245,6 +249,11 @@ export function CajaProvider({ children }) {
     };
   };
 
+  const getDisponiblesEnBloque = (bloque) => {
+    if (!bloque) return 0;
+    return Math.max(bloque.fin - bloque.siguiente + 1, 0);
+  };
+
   const reservarBloqueParaModulo = async ({
     modulo,
     targetDeviceId = deviceId,
@@ -292,6 +301,62 @@ export function CajaProvider({ children }) {
     return reservado;
   };
 
+  const reservarBloquePreventivo = async (modulo, targetOwnerUid) => {
+    if (!isOnline || !targetOwnerUid || !CONSECUTIVOS_META[modulo]) return;
+
+    const key = `${targetOwnerUid}__${deviceId}__${modulo}`;
+    if (reservasPreventivasRef.current[key]) return;
+
+    reservasPreventivasRef.current[key] = true;
+    try {
+      await reservarBloqueParaModulo({
+        modulo,
+        targetOwnerUid,
+      });
+    } catch (error) {
+      console.error(`No se pudo reservar bloque preventivo (${modulo}):`, error);
+    } finally {
+      delete reservasPreventivasRef.current[key];
+    }
+  };
+
+  useEffect(() => {
+    if (!currentUser?.uid || !isOnline) return undefined;
+
+    let cancelled = false;
+
+    const prepararBloquesParaOffline = async () => {
+      for (const modulo of MODULOS_CONSECUTIVOS) {
+        if (cancelled) return;
+
+        const bloque = getBloqueNormalizado(modulo);
+        const ownerOk = bloque?.ownerUid === currentUser.uid;
+        const disponibles = getDisponiblesEnBloque(bloque);
+
+        if (!ownerOk || disponibles <= 0) {
+          try {
+            await reservarBloqueParaModulo({
+              modulo,
+              targetOwnerUid: currentUser.uid,
+            });
+          } catch (error) {
+            console.error(`No se pudo preparar bloque offline (${modulo}):`, error);
+          }
+          continue;
+        }
+
+        if (disponibles <= BLOQUE_MIN_DISPONIBLES) {
+          void reservarBloquePreventivo(modulo, currentUser.uid);
+        }
+      }
+    };
+
+    void prepararBloquesParaOffline();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.uid, isOnline, deviceId]);
+
   const obtenerConsecutivoParaModulo = async (modulo) => {
     if (!CONSECUTIVOS_META[modulo]) {
       throw new Error(`Modulo no soportado para consecutivos: ${modulo}`);
@@ -317,6 +382,11 @@ export function CajaProvider({ children }) {
 
     if (!bloque || bloque.siguiente > bloque.fin) {
       throw new Error('No hay consecutivos disponibles para este modulo.');
+    }
+
+    const disponibles = getDisponiblesEnBloque(bloque);
+    if (isOnline && disponibles <= BLOQUE_MIN_DISPONIBLES) {
+      void reservarBloquePreventivo(modulo, currentUid);
     }
 
     const numero = bloque.siguiente;

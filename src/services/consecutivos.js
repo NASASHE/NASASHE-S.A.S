@@ -132,14 +132,40 @@ export const reservarBloque = async ({
     if (!consecutivosSnap.exists()) {
       throw new Error("No se encontro el documento 'configuracion/consecutivos'.");
     }
+    const bloqueSnap = await transaction.get(bloqueRef);
+    const bloqueActual = bloqueSnap.exists() ? bloqueSnap.data() : null;
 
     const data = consecutivosSnap.data();
     const ultimoReservado = normalizarNumero(data?.[meta.campo]);
-    const inicio = ultimoReservado + 1;
-    const fin = ultimoReservado + size;
+    const finActualBloque = normalizarNumero(bloqueActual?.fin);
+    const inicioNuevoSegmento = Math.max(ultimoReservado, finActualBloque) + 1;
+    const finNuevoSegmento = inicioNuevoSegmento + size - 1;
+
+    let inicio = inicioNuevoSegmento;
+    let fin = finNuevoSegmento;
+    let siguiente = inicioNuevoSegmento;
+
+    if (bloqueActual) {
+      const inicioActual = normalizarNumero(bloqueActual?.inicio);
+      const finActual = normalizarNumero(bloqueActual?.fin);
+      const siguienteActual = normalizarNumero(bloqueActual?.siguiente);
+      const tienePendientes =
+        inicioActual > 0 &&
+        finActual >= inicioActual &&
+        siguienteActual >= inicioActual &&
+        siguienteActual <= finActual;
+
+      if (tienePendientes) {
+        inicio = inicioActual;
+        siguiente = siguienteActual;
+      }
+    }
+
+    fin = finNuevoSegmento;
+    const tamano = Math.max(1, fin - inicio + 1);
 
     transaction.update(consecutivosRef, {
-      [meta.campo]: fin,
+      [meta.campo]: finNuevoSegmento,
     });
 
     transaction.set(
@@ -151,8 +177,8 @@ export const reservarBloque = async ({
         modulo,
         inicio,
         fin,
-        siguiente: inicio,
-        tamano: size,
+        siguiente,
+        tamano,
         actualizadoEn: Timestamp.now(),
         reservadoEn: Timestamp.now(),
         asignadoPor: actor,
@@ -163,8 +189,8 @@ export const reservarBloque = async ({
     return {
       inicio,
       fin,
-      siguiente: inicio,
-      tamano: size,
+      siguiente,
+      tamano,
       bloqueRef,
     };
   });

@@ -4,11 +4,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { collection, doc, getDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useCaja } from '../context/CajaContext';
-import {
-  CONSECUTIVOS_META,
-  DEFAULT_BLOCK_SIZE,
-  reservarBloque,
-} from '../services/consecutivos';
 import './PaginaConfiguracion.css';
 
 const consecDocRef = doc(db, 'configuracion', 'consecutivos');
@@ -19,20 +14,11 @@ const toNumberOrZero = (valor) => {
   return num;
 };
 
-const toPositiveInt = (valor, fallback = DEFAULT_BLOCK_SIZE) => {
-  const num = Number(valor);
-  if (!Number.isFinite(num) || num <= 0) return fallback;
-  return Math.floor(num);
-};
-
 function PaginaConfiguracion() {
   const {
     userProfile,
-    currentUser,
     deviceId,
     deviceAlias,
-    reservarBloqueParaModulo,
-    actualizarAliasDispositivo,
   } = useCaja();
   const esAdmin = userProfile?.rol === 'admin';
 
@@ -49,20 +35,9 @@ function PaginaConfiguracion() {
 
   const [bloques, setBloques] = useState([]);
   const [cargandoBloques, setCargandoBloques] = useState(true);
-  const [mensajeBloques, setMensajeBloques] = useState('');
-  const [reservandoBloque, setReservandoBloque] = useState(false);
   const [usuarios, setUsuarios] = useState([]);
   const [cargandoUsuarios, setCargandoUsuarios] = useState(true);
 
-  const [bloqueForm, setBloqueForm] = useState({
-    deviceId: '',
-    deviceAlias: '',
-    ownerUid: '',
-    modulo: 'ventas',
-    tamano: String(DEFAULT_BLOCK_SIZE),
-  });
-
-  const modulos = useMemo(() => Object.keys(CONSECUTIVOS_META), []);
   const usuariosPorUid = useMemo(
     () => Object.fromEntries(usuarios.map((u) => [u.id, u])),
     [usuarios],
@@ -94,19 +69,6 @@ function PaginaConfiguracion() {
 
     cargarConsecutivos();
   }, []);
-
-  useEffect(() => {
-    if (!deviceId) return;
-    setBloqueForm((prev) => {
-      if (prev.deviceId && prev.ownerUid && prev.deviceAlias) return prev;
-      return {
-        ...prev,
-        deviceId: prev.deviceId || deviceId,
-        deviceAlias: prev.deviceAlias || deviceAlias || '',
-        ownerUid: prev.ownerUid || currentUser?.uid || '',
-      };
-    });
-  }, [deviceId, deviceAlias, currentUser?.uid]);
 
   useEffect(() => {
     if (!esAdmin) return undefined;
@@ -202,84 +164,6 @@ function PaginaConfiguracion() {
     setGuardando(false);
   };
 
-  const handleBloqueFieldChange = (e) => {
-    const { name, value } = e.target;
-    if (name === 'tamano' && !/^\d*$/.test(value)) return;
-    setBloqueForm((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleReservarBloqueActual = async () => {
-    if (!bloqueForm.modulo) return;
-    setReservandoBloque(true);
-    setMensajeBloques('');
-    try {
-      const tamano = toPositiveInt(bloqueForm.tamano);
-      const aliasActual = actualizarAliasDispositivo(bloqueForm.deviceAlias);
-      await reservarBloqueParaModulo({
-        modulo: bloqueForm.modulo,
-        targetDeviceAlias: aliasActual,
-        blockSize: tamano,
-      });
-      setMensajeBloques(
-        `Bloque reservado para este dispositivo (${aliasActual}) en ${bloqueForm.modulo}.`,
-      );
-    } catch (error) {
-      console.error('Error al reservar bloque para dispositivo actual:', error);
-      setMensajeBloques(error.message || 'No se pudo reservar el bloque.');
-    }
-    setReservandoBloque(false);
-  };
-
-  const handleReservarBloqueManual = async (e) => {
-    e.preventDefault();
-
-    const targetDeviceId = String(bloqueForm.deviceId || '').trim();
-    if (!targetDeviceId) {
-      setMensajeBloques('Debes escribir un deviceId para reservar el bloque.');
-      return;
-    }
-    const targetDeviceAlias = String(bloqueForm.deviceAlias || '').trim();
-    if (!targetDeviceAlias) {
-      setMensajeBloques('Debes escribir un alias para identificar el dispositivo.');
-      return;
-    }
-    const targetOwnerUid = String(bloqueForm.ownerUid || '').trim();
-    if (!targetOwnerUid) {
-      setMensajeBloques('Debes seleccionar el usuario propietario del bloque.');
-      return;
-    }
-
-    if (!modulos.includes(bloqueForm.modulo)) {
-      setMensajeBloques('Modulo invalido para reservar bloque.');
-      return;
-    }
-
-    setReservandoBloque(true);
-    setMensajeBloques('');
-
-    try {
-      const tamano = toPositiveInt(bloqueForm.tamano);
-      const owner = usuariosPorUid[targetOwnerUid];
-      const ownerLabel = owner?.nombre || owner?.email || targetOwnerUid;
-      await reservarBloque({
-        deviceId: targetDeviceId,
-        deviceAlias: targetDeviceAlias,
-        ownerUid: targetOwnerUid,
-        modulo: bloqueForm.modulo,
-        blockSize: tamano,
-        actor: userProfile?.nombre || 'ADMIN',
-      });
-      setMensajeBloques(
-        `Bloque reservado: ${bloqueForm.modulo} para ${targetDeviceAlias} (usuario ${ownerLabel}, tamano ${tamano}).`,
-      );
-    } catch (error) {
-      console.error('Error al reservar bloque manual:', error);
-      setMensajeBloques(error.message || 'No se pudo reservar el bloque manualmente.');
-    }
-
-    setReservandoBloque(false);
-  };
-
   const renderCampo = (name, label, prefijo) => {
     const valorNumero = toNumberOrZero(valores[name]);
     return (
@@ -373,80 +257,13 @@ function PaginaConfiguracion() {
         <p>
           Dispositivo actual: <strong>{deviceAlias}</strong> ({deviceId})
         </p>
-
-        <form onSubmit={handleReservarBloqueManual} style={{ display: 'grid', gap: '8px', maxWidth: '720px' }}>
-          <label htmlFor="bloqueDeviceAlias">Alias del dispositivo</label>
-          <input
-            id="bloqueDeviceAlias"
-            name="deviceAlias"
-            type="text"
-            value={bloqueForm.deviceAlias}
-            onChange={handleBloqueFieldChange}
-            placeholder="Ej: CAJA PRINCIPAL"
-          />
-
-          <label htmlFor="bloqueDeviceId">Device ID</label>
-          <input
-            id="bloqueDeviceId"
-            name="deviceId"
-            type="text"
-            value={bloqueForm.deviceId}
-            onChange={handleBloqueFieldChange}
-            placeholder="ID del dispositivo destino"
-          />
-
-          <label htmlFor="bloqueOwnerUid">Usuario propietario</label>
-          <select
-            id="bloqueOwnerUid"
-            name="ownerUid"
-            value={bloqueForm.ownerUid}
-            onChange={handleBloqueFieldChange}
-          >
-            <option value="">{cargandoUsuarios ? 'Cargando usuarios...' : '-- Selecciona un usuario --'}</option>
-            {usuarios.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.nombre || u.email || u.id}
-              </option>
-            ))}
-          </select>
-
-          <label htmlFor="bloqueModulo">Modulo</label>
-          <select
-            id="bloqueModulo"
-            name="modulo"
-            value={bloqueForm.modulo}
-            onChange={handleBloqueFieldChange}
-          >
-            {modulos.map((modulo) => (
-              <option key={modulo} value={modulo}>{modulo}</option>
-            ))}
-          </select>
-
-          <label htmlFor="bloqueTamano">Tamano del bloque</label>
-          <input
-            id="bloqueTamano"
-            name="tamano"
-            type="text"
-            inputMode="numeric"
-            value={bloqueForm.tamano}
-            onChange={handleBloqueFieldChange}
-          />
-
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              onClick={handleReservarBloqueActual}
-              disabled={reservandoBloque}
-            >
-              {reservandoBloque ? 'Reservando...' : 'Reservar para este dispositivo'}
-            </button>
-            <button type="submit" disabled={reservandoBloque}>
-              {reservandoBloque ? 'Reservando...' : 'Reservar/Reasignar manualmente'}
-            </button>
-          </div>
-        </form>
-
-        {mensajeBloques && <p className="configuracion-estado">{mensajeBloques}</p>}
+        <p className="configuracion-estado">
+          La reserva manual fue desactivada. El sistema asigna bloques automaticamente por usuario, dispositivo y modulo.
+        </p>
+        <p className="configuracion-estado">
+          Si hay internet, recarga bloques en segundo plano antes de agotarse. Sin internet, sigue operando con los bloques ya reservados.
+        </p>
+        {cargandoUsuarios && <p className="configuracion-estado">Cargando nombres de usuarios...</p>}
 
         {cargandoBloques ? (
           <p className="configuracion-estado">Cargando bloques...</p>
