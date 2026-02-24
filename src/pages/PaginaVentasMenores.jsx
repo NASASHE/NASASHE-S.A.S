@@ -6,7 +6,8 @@ import {
   collection, 
   doc, 
   Timestamp, 
-  runTransaction 
+  writeBatch,
+  increment
 } from 'firebase/firestore';
 import { useCaja } from '../context/CajaContext';
 import './PaginaVentasMenores.css';
@@ -14,10 +15,6 @@ import { generarTextoTicketVentaMenor } from '../utils/generarTickets';
 import { imprimirTicketEnNavegador } from '../utils/imprimirTicket';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 const isTauriEnvironment = () => typeof window !== 'undefined' && Boolean(window.__TAURI_INTERNALS__);
-
-const formatConsecutivo = (num, prefix) => {
-  return `${prefix}${String(num).padStart(5, '0')}`;
-};
 
 const descargarTxt = (contenido, nombreArchivo) => {
   const element = document.createElement("a");
@@ -30,7 +27,7 @@ const descargarTxt = (contenido, nombreArchivo) => {
 };
 
 function PaginaVentasMenores() {
-  const { userProfile, base } = useCaja();
+  const { userProfile, base, obtenerConsecutivoParaModulo } = useCaja();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // --- (Estados del formulario y de la venta, sin cambios) ---
@@ -121,50 +118,48 @@ function PaginaVentasMenores() {
     setIsSubmitting(true);
 
     let ventaDataParaTicket = null;
-    let nuevoConsecutivoStr = "";
 
     try {
       const nuevaVentaRef = doc(collection(db, "ventasMenores"));
+      const { consecutivo: nuevoConsecutivoStr, bloqueRef } =
+        await obtenerConsecutivoParaModulo('ventasMenores');
 
-      await runTransaction(db, async (transaction) => {
-        const consecRef = doc(db, "configuracion", "consecutivos");
-        const consecDoc = await transaction.get(consecRef);
-        if (!consecDoc.exists()) throw new Error("Consecutivos no encontrados");
+      const clienteNombre = nombreCliente.trim().toUpperCase();
 
-        const ultimoNum = consecDoc.data().ventasMenores ?? 0;
-        const nuevoNum = ultimoNum + 1;
-        nuevoConsecutivoStr = formatConsecutivo(nuevoNum, "FAVMI");
+      const ventaData = {
+        consecutivo: nuevoConsecutivoStr,
+        cliente: clienteNombre || 'N/A',
+        items: itemsVenta,
+        total: totalVenta,
+        fecha: Timestamp.now(),
+        usuario: userProfile?.nombre || 'SISTEMA'
+      };
+      ventaDataParaTicket = ventaData;
 
-        const clienteNombre = nombreCliente.trim().toUpperCase();
+      const batch = writeBatch(db);
+      const movimientoCajaRef = doc(collection(db, "movimientos_caja"));
 
-        const ventaData = {
-          consecutivo: nuevoConsecutivoStr,
-          cliente: clienteNombre || 'N/A',
-          items: itemsVenta,
-          total: totalVenta,
-          fecha: Timestamp.now(),
-          usuario: userProfile?.nombre || 'SISTEMA'
-        };
-        ventaDataParaTicket = ventaData;
-
-        const movimientoCajaRef = doc(collection(db, "movimientos_caja"));
-
-        transaction.set(nuevaVentaRef, ventaData);
-        transaction.update(consecRef, { ventasMenores: nuevoNum });
-        transaction.set(movimientoCajaRef, {
-          tipo: "ingreso",
-          monto: totalVenta,
-          descripcion: `Venta menor ${nuevoConsecutivoStr} - ${clienteNombre || 'N/A'}`,
-          fecha: Timestamp.now(),
-          usuario: userProfile?.nombre || 'SISTEMA',
-          anulado: false,
-          referencia: {
-            coleccion: "ventasMenores",
-            id: nuevaVentaRef.id,
-            consecutivo: nuevoConsecutivoStr
-          }
-        });
+      batch.set(nuevaVentaRef, ventaData);
+      batch.update(bloqueRef, {
+        siguiente: increment(1),
+        actualizadoEn: Timestamp.now(),
       });
+      batch.set(movimientoCajaRef, {
+        tipo: "ingreso",
+        monto: totalVenta,
+        descripcion: `Venta menor ${nuevoConsecutivoStr} - ${clienteNombre || 'N/A'}`,
+        fecha: Timestamp.now(),
+        usuario: userProfile?.nombre || 'SISTEMA',
+        anulado: false,
+        referencia: {
+          coleccion: "ventasMenores",
+          id: nuevaVentaRef.id,
+          consecutivo: nuevoConsecutivoStr
+        }
+      });
+
+      // Firestore lo deja en cola automÃ¡ticamente si no hay internet.
+      await batch.commit();
 
       setVentaReciente(ventaDataParaTicket);
       setNombreCliente('');

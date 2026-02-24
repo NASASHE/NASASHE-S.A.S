@@ -10,13 +10,23 @@ import {
   getDoc,
   onSnapshot,
   Timestamp,
-  updateDoc
+  updateDoc,
+  waitForPendingWrites
 } from 'firebase/firestore';
+import {
+  CONSECUTIVOS_META,
+  DEFAULT_BLOCK_SIZE,
+  formatConsecutivo,
+  getBloqueRef,
+  getOrCreateDeviceId,
+  reservarBloque,
+} from '../services/consecutivos';
 
 const CajaContext = createContext();
 
 const movimientosCajaRef = collection(db, "movimientos_caja");
 const consecDocRef = doc(db, "configuracion", "consecutivos");
+const getInitialOnlineState = () => (typeof window === 'undefined' ? true : navigator.onLine);
 
 const getInitialBaseEstablecida = () => sessionStorage.getItem('baseEstablecida') === 'true';
 
@@ -54,19 +64,30 @@ export function CajaProvider({ children }) {
   const [baseGuardada, setBaseGuardada] = useState(0);
   const [consecutivos, setConsecutivos] = useState(0);
   const [consecutivosData, setConsecutivosData] = useState({});
+  const [bloquesConsecutivos, setBloquesConsecutivos] = useState({});
+  const [deviceId] = useState(getOrCreateDeviceId);
   const [baseEstablecida, setBaseEstablecida] = useState(getInitialBaseEstablecida);
   const [currentUser, setCurrentUser] = useState(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [userProfile, setUserProfile] = useState(null);
+  const [isOnline, setIsOnline] = useState(getInitialOnlineState);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     let unsubscribeCaja = () => {};
     let unsubscribeConsec = () => {};
+    let unsubscribeBloques = [];
+
+    const clearBloqueListeners = () => {
+      unsubscribeBloques.forEach((fn) => fn());
+      unsubscribeBloques = [];
+    };
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
       unsubscribeCaja();
       unsubscribeConsec();
+      clearBloqueListeners();
 
       if (user) {
         try {
@@ -108,6 +129,21 @@ export function CajaProvider({ children }) {
               console.error("Error al escuchar consecutivos: ", error);
             }
           );
+
+          unsubscribeBloques = Object.keys(CONSECUTIVOS_META).map((modulo) =>
+            onSnapshot(
+              getBloqueRef(deviceId, modulo),
+              (docSnap) => {
+                setBloquesConsecutivos((prev) => ({
+                  ...prev,
+                  [modulo]: docSnap.exists() ? docSnap.data() : null,
+                }));
+              },
+              (error) => {
+                console.error(`Error al escuchar bloque de consecutivo (${modulo}): `, error);
+              },
+            )
+          );
         } catch (error) {
           console.error("Error al cargar datos iniciales: ", error);
         }
@@ -116,6 +152,7 @@ export function CajaProvider({ children }) {
         setBaseGuardada(0);
         setBaseEstablecida(false);
         setUserProfile(null);
+        setBloquesConsecutivos({});
         sessionStorage.removeItem('baseEstablecida');
       }
 
@@ -126,11 +163,149 @@ export function CajaProvider({ children }) {
       unsubscribeAuth();
       unsubscribeCaja();
       unsubscribeConsec();
+      clearBloqueListeners();
+    };
+  }, [deviceId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const syncPendingWrites = async () => {
+      if (!navigator.onLine) return;
+      setIsSyncing(true);
+      try {
+        await waitForPendingWrites(db);
+      } catch (error) {
+        console.error("No se pudo confirmar la sincronizacion offline:", error);
+      } finally {
+        setIsSyncing(false);
+      }
+    };
+
+    const handleOnline = () => {
+      setIsOnline(true);
+      syncPendingWrites();
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+      setIsSyncing(false);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    if (navigator.onLine) {
+      syncPendingWrites();
+    }
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
     };
   }, []);
 
   const getUsuarioMovimiento = () =>
     userProfile?.nombre || currentUser?.displayName || currentUser?.email || 'SISTEMA';
+
+  const getBloqueNormalizado = (modulo) => {
+    const raw = bloquesConsecutivos?.[modulo];
+    if (!raw) return null;
+
+    const inicio = Number(raw.inicio);
+    const fin = Number(raw.fin);
+    const siguiente = Number(raw.siguiente);
+
+    if (!Number.isFinite(inicio) || !Number.isFinite(fin) || !Number.isFinite(siguiente)) {
+      return null;
+    }
+
+    return {
+      ...raw,
+      inicio,
+      fin,
+      siguiente,
+    };
+  };
+
+  const reservarBloqueParaModulo = async ({
+    modulo,
+    targetDeviceId = deviceId,
+    targetOwnerUid = currentUser?.uid,
+    blockSize = DEFAULT_BLOCK_SIZE,
+  }) => {
+    if (!CONSECUTIVOS_META[modulo]) {
+      throw new Error(`Modulo no soportado para consecutivos: ${modulo}`);
+    }
+
+    if (!isOnline) {
+      throw new Error('Sin internet para reservar un nuevo bloque de consecutivos.');
+    }
+    if (!targetOwnerUid) {
+      throw new Error('No hay un usuario autenticado para reservar bloque.');
+    }
+
+    const reservado = await reservarBloque({
+      deviceId: targetDeviceId,
+      ownerUid: targetOwnerUid,
+      modulo,
+      blockSize,
+      actor: getUsuarioMovimiento(),
+    });
+
+    if (targetDeviceId === deviceId) {
+      setBloquesConsecutivos((prev) => ({
+        ...prev,
+        [modulo]: {
+          ...(prev?.[modulo] || {}),
+          inicio: reservado.inicio,
+          fin: reservado.fin,
+          siguiente: reservado.siguiente,
+          tamano: reservado.tamano,
+          deviceId: targetDeviceId,
+          ownerUid: targetOwnerUid,
+          modulo,
+        },
+      }));
+    }
+
+    return reservado;
+  };
+
+  const obtenerConsecutivoParaModulo = async (modulo) => {
+    if (!CONSECUTIVOS_META[modulo]) {
+      throw new Error(`Modulo no soportado para consecutivos: ${modulo}`);
+    }
+    const currentUid = currentUser?.uid;
+    if (!currentUid) {
+      throw new Error('No hay usuario autenticado para generar consecutivos.');
+    }
+
+    let bloque = getBloqueNormalizado(modulo);
+    if (!bloque || bloque.ownerUid !== currentUid || bloque.siguiente > bloque.fin) {
+      const reservado = await reservarBloqueParaModulo({
+        modulo,
+        targetOwnerUid: currentUid,
+      });
+      bloque = {
+        inicio: reservado.inicio,
+        fin: reservado.fin,
+        siguiente: reservado.siguiente,
+        ownerUid: currentUid,
+      };
+    }
+
+    if (!bloque || bloque.siguiente > bloque.fin) {
+      throw new Error('No hay consecutivos disponibles para este modulo.');
+    }
+
+    const numero = bloque.siguiente;
+    return {
+      numero,
+      consecutivo: formatConsecutivo(modulo, numero),
+      bloqueRef: getBloqueRef(deviceId, modulo),
+    };
+  };
 
   const registrarMovimientoCaja = async ({
     tipo,
@@ -268,7 +443,13 @@ export function CajaProvider({ children }) {
     userProfile,
     setBase,
     consecutivos,
-    consecutivosData
+    consecutivosData,
+    bloquesConsecutivos,
+    deviceId,
+    obtenerConsecutivoParaModulo,
+    reservarBloqueParaModulo,
+    isOnline,
+    isSyncing
   };
 
   if (loadingAuth) {

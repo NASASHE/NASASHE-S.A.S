@@ -1,10 +1,10 @@
-// src/pages/PaginaRemisiones.jsx
+﻿// src/pages/PaginaRemisiones.jsx
 
 import React, { useEffect, useMemo, useState } from 'react';
 import './PaginaRemisiones.css';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { collection, doc, getDocs, runTransaction, Timestamp } from 'firebase/firestore';
+import { collection, doc, getDocs, writeBatch, increment, Timestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useCaja } from '../context/CajaContext';
 import { resolveAssetPath } from '../utils/assetPath';
@@ -32,7 +32,12 @@ const cargarImagenComoBase64 = async (url) => {
 };
 
 function PaginaRemisiones() {
-  const { userProfile, consecutivosData } = useCaja();
+  const {
+    userProfile,
+    consecutivosData,
+    bloquesConsecutivos,
+    obtenerConsecutivoParaModulo,
+  } = useCaja();
   const esAdmin = userProfile?.rol === 'admin';
 
   const [proveedores, setProveedores] = useState([]);
@@ -63,8 +68,16 @@ function PaginaRemisiones() {
   const [ultimoConsecutivo, setUltimoConsecutivo] = useState('');
 
   const siguienteNumeroRemision = useMemo(
-    () => (consecutivosData?.remisiones ?? 0) + 1,
-    [consecutivosData]
+    () => {
+      const bloque = bloquesConsecutivos?.remisiones;
+      const siguiente = Number(bloque?.siguiente);
+      const fin = Number(bloque?.fin);
+      if (Number.isFinite(siguiente) && Number.isFinite(fin) && siguiente <= fin) {
+        return siguiente;
+      }
+      return (consecutivosData?.remisiones ?? 0) + 1;
+    },
+    [bloquesConsecutivos, consecutivosData]
   );
 
   useEffect(() => {
@@ -83,7 +96,7 @@ function PaginaRemisiones() {
         setProveedores(proveedoresData);
         setArticulos(articulosData);
       } catch (error) {
-        console.error('Error al cargar datos para la remisión:', error);
+        console.error('Error al cargar datos para la remisiÃ³n:', error);
       }
     };
 
@@ -147,7 +160,7 @@ function PaginaRemisiones() {
       : toNumber(itemSeleccionado.cantidad);
 
     if (cantidad <= 0) {
-      alert('Ingresa una cantidad válida.');
+      alert('Ingresa una cantidad vÃ¡lida.');
       return;
     }
 
@@ -184,11 +197,11 @@ function PaginaRemisiones() {
       return false;
     }
     if (items.length === 0) {
-      alert('Agrega al menos un material a la remisión.');
+      alert('Agrega al menos un material a la remisiÃ³n.');
       return false;
     }
     if (!datosConductor.nombre || !datosConductor.cedula || !datosConductor.placa) {
-      alert('Completa los datos del conductor (nombre, cédula y placa son obligatorios).');
+      alert('Completa los datos del conductor (nombre, cÃ©dula y placa son obligatorios).');
       return false;
     }
     return true;
@@ -215,27 +228,27 @@ function PaginaRemisiones() {
     doc.text('Tel: 3227377140', pageWidth / 2, cursorY + 24, { align: 'center' });
 
     doc.setFontSize(14);
-    doc.text('REMISIÓN', pageWidth - margin, cursorY + 10, { align: 'right' });
+    doc.text('REMISIÃ“N', pageWidth - margin, cursorY + 10, { align: 'right' });
     doc.setFontSize(12);
     doc.text(remisionData.consecutivo, pageWidth - margin, cursorY + 18, { align: 'right' });
 
     cursorY += 30;
     doc.setFontSize(11);
     doc.text(`Destino: ${remisionData.destino.nombre}`, margin, cursorY);
-    doc.text(`Dirección: ${remisionData.destino.direccion || 'N/D'}`, pageWidth / 2, cursorY);
+    doc.text(`DirecciÃ³n: ${remisionData.destino.direccion || 'N/D'}`, pageWidth / 2, cursorY);
     cursorY += 6;
     doc.text(`NIT: ${remisionData.destino.nit || 'N/D'}`, margin, cursorY);
-    doc.text(`Teléfono: ${remisionData.destino.telefono || 'N/D'}`, pageWidth / 2, cursorY);
+    doc.text(`TelÃ©fono: ${remisionData.destino.telefono || 'N/D'}`, pageWidth / 2, cursorY);
     cursorY += 10;
 
-    doc.text(`Fecha emisión: ${new Date(remisionData.fecha.toDate()).toLocaleString()}`, margin, cursorY);
+    doc.text(`Fecha emisiÃ³n: ${new Date(remisionData.fecha.toDate()).toLocaleString()}`, margin, cursorY);
     cursorY += 6;
     doc.text(`Conductor: ${remisionData.conductor.nombre}`, margin, cursorY);
-    doc.text(`Cédula: ${remisionData.conductor.cedula}`, pageWidth / 2, cursorY);
+    doc.text(`CÃ©dula: ${remisionData.conductor.cedula}`, pageWidth / 2, cursorY);
     cursorY += 6;
-    doc.text(`Dirección: ${remisionData.conductor.direccion || 'N/D'}`, margin, cursorY);
+    doc.text(`DirecciÃ³n: ${remisionData.conductor.direccion || 'N/D'}`, margin, cursorY);
     cursorY += 6;
-    doc.text(`Vínculo: ${remisionData.conductor.vinculo}`, margin, cursorY);
+    doc.text(`VÃ­nculo: ${remisionData.conductor.vinculo}`, margin, cursorY);
     doc.text(`Placa: ${remisionData.conductor.placa}`, pageWidth / 2, cursorY);
     cursorY += 6;
     doc.text(`Celular: ${remisionData.conductor.celular || 'N/D'}`, margin, cursorY);
@@ -248,7 +261,7 @@ function PaginaRemisiones() {
 
     autoTable(doc, {
       startY: cursorY + 4,
-      head: [['Ítem', 'Detalle del material', 'Cantidad (Kg)']],
+      head: [['Ãtem', 'Detalle del material', 'Cantidad (Kg)']],
       body: remisionData.items.map((item, idx) => [
         (idx + 1).toString(),
         item.nombre,
@@ -277,7 +290,7 @@ function PaginaRemisiones() {
       doc.setPage(i);
       const pageHeight = doc.internal.pageSize.getHeight();
       doc.text(
-        `Página ${i} de ${pageCount}`,
+        `PÃ¡gina ${i} de ${pageCount}`,
         pageWidth - margin,
         pageHeight - 8,
         { align: 'right' }
@@ -297,51 +310,53 @@ function PaginaRemisiones() {
       const remisionRef = doc(collection(db, 'remisiones'));
       let remisionParaPdf = null;
 
-      await runTransaction(db, async (transaction) => {
-        const consecRef = doc(db, 'configuracion', 'consecutivos');
-        const consecSnap = await transaction.get(consecRef);
-        if (!consecSnap.exists()) throw new Error('No se encontró la configuración de consecutivos.');
+      const { consecutivo: consecutivoStr, bloqueRef } =
+        await obtenerConsecutivoParaModulo('remisiones');
 
-        const articulosRefs = items.map((item) => doc(db, 'articulos', item.articuloId));
-        const articulosDocs = await Promise.all(articulosRefs.map((ref) => transaction.get(ref)));
-
-        const ultimoNum = (consecSnap.data().remisiones ?? 0) + 1;
-        const consecutivoStr = formatConsecutivo(ultimoNum);
-
-        const itemsConStock = items.map((item, index) => {
-          const articuloDoc = articulosDocs[index];
-          if (!articuloDoc.exists()) {
-            throw new Error(`No se encontró el artículo ${item.nombre} en inventario.`);
-          }
-          const stockActual = articuloDoc.data().stock || 0;
-          if (item.cantidad > stockActual) {
-            throw new Error(`El material ${item.nombre} no tiene stock suficiente.`);
-          }
-          const nuevoStock = stockActual - item.cantidad;
-          transaction.update(articulosRefs[index], { stock: nuevoStock });
-          return item;
-        });
-
-        const remisionData = {
-          consecutivo: consecutivoStr,
-          destino: {
-            id: destinoSeleccionado.id,
-            nombre: destinoSeleccionado.nombre,
-            nit: destinoSeleccionado.nit || '',
-            direccion: destinoSeleccionado.direccion || '',
-            telefono: destinoSeleccionado.telefono || ''
-          },
-          conductor: datosConductor,
-          items: itemsConStock,
-          observaciones,
-          fecha: Timestamp.now(),
-          creadoPor: userProfile?.nombre || 'SISTEMA'
-        };
-
-        remisionParaPdf = remisionData;
-        transaction.set(remisionRef, remisionData);
-        transaction.update(consecRef, { remisiones: ultimoNum });
+      const itemsConStock = items.map((item) => {
+        const articuloLocal = articulos.find((art) => art.id === item.articuloId);
+        if (!articuloLocal) {
+          throw new Error(`No se encontro el articulo ${item.nombre} en cache.`);
+        }
+        const stockActual = Number(articuloLocal.stock) || 0;
+        if (item.cantidad > stockActual) {
+          throw new Error(`El material ${item.nombre} no tiene stock suficiente.`);
+        }
+        return item;
       });
+
+      const remisionData = {
+        consecutivo: consecutivoStr,
+        destino: {
+          id: destinoSeleccionado.id,
+          nombre: destinoSeleccionado.nombre,
+          nit: destinoSeleccionado.nit || '',
+          direccion: destinoSeleccionado.direccion || '',
+          telefono: destinoSeleccionado.telefono || ''
+        },
+        conductor: datosConductor,
+        items: itemsConStock,
+        observaciones,
+        fecha: Timestamp.now(),
+        creadoPor: userProfile?.nombre || 'SISTEMA'
+      };
+
+      remisionParaPdf = remisionData;
+
+      const batch = writeBatch(db);
+      batch.set(remisionRef, remisionData);
+      batch.update(bloqueRef, {
+        siguiente: increment(1),
+        actualizadoEn: Timestamp.now(),
+      });
+
+      itemsConStock.forEach((item) => {
+        const articuloRef = doc(db, 'articulos', item.articuloId);
+        batch.update(articuloRef, { stock: increment(-item.cantidad) });
+      });
+
+      // Firestore lo deja en cola automaticamente si no hay internet.
+      await batch.commit();
 
       const pdf = await generarPdf(remisionParaPdf);
       setUltimoPdf(pdf);
@@ -363,8 +378,8 @@ function PaginaRemisiones() {
       const blobUrl = pdf.output('bloburl');
       window.open(blobUrl, '_blank');
     } catch (error) {
-      console.error('Error al guardar la remisión:', error);
-      alert(error.message || 'No se pudo guardar la remisión.');
+      console.error('Error al guardar la remisiÃ³n:', error);
+      alert(error.message || 'No se pudo guardar la remisiÃ³n.');
     }
 
     setGuardando(false);
@@ -403,8 +418,8 @@ function PaginaRemisiones() {
       <div className="remisiones-encabezado">
         <div className="remisiones-encabezado-textos">
           <h1>Remisiones</h1>
-          <p>Genera y guarda remisiones con consecutivo y descarga el PDF listo para impresión.</p>
-          <p className="remisiones-consecutivo">Próximo consecutivo: <strong>{formatConsecutivo(siguienteNumeroRemision)}</strong></p>
+          <p>Genera y guarda remisiones con consecutivo y descarga el PDF listo para impresiÃ³n.</p>
+          <p className="remisiones-consecutivo">PrÃ³ximo consecutivo: <strong>{formatConsecutivo(siguienteNumeroRemision)}</strong></p>
         </div>
         <img src={resolveAssetPath('logo con fondo.png')} alt="Logo Nasashe" className="remisiones-logo" />
       </div>
@@ -426,11 +441,11 @@ function PaginaRemisiones() {
             <input type="text" value={destinoInfo.nit} readOnly />
           </label>
           <label>
-            Dirección
+            DirecciÃ³n
             <input type="text" value={destinoInfo.direccion} readOnly />
           </label>
           <label>
-            Teléfono
+            TelÃ©fono
             <input type="text" value={destinoInfo.telefono} readOnly />
           </label>
         </div>
@@ -444,15 +459,15 @@ function PaginaRemisiones() {
             <input name="nombre" value={datosConductor.nombre} onChange={handleConductorChange} />
           </label>
           <label>
-            Cédula
+            CÃ©dula
             <input name="cedula" value={datosConductor.cedula} onChange={handleConductorChange} />
           </label>
           <label>
-            Dirección de residencia
+            DirecciÃ³n de residencia
             <input name="direccion" value={datosConductor.direccion} onChange={handleConductorChange} />
           </label>
           <label>
-            Placa vehículo
+            Placa vehÃ­culo
             <input name="placa" value={datosConductor.placa} onChange={handleConductorChange} />
           </label>
           <label>
@@ -460,7 +475,7 @@ function PaginaRemisiones() {
             <input name="celular" value={datosConductor.celular} onChange={handleConductorChange} />
           </label>
           <div className="remisiones-vinculo">
-            <span>Vínculo con la razón social</span>
+            <span>VÃ­nculo con la razÃ³n social</span>
             <label className="remisiones-check">
               <input
                 type="radio"
@@ -529,7 +544,7 @@ function PaginaRemisiones() {
               />
             )}
           </div>
-          <button type="button" className="remisiones-add" onClick={handleAgregarItem}>Añadir material</button>
+          <button type="button" className="remisiones-add" onClick={handleAgregarItem}>AÃ±adir material</button>
         </div>
 
         {items.length > 0 && (
@@ -575,7 +590,7 @@ function PaginaRemisiones() {
           {guardando ? 'Guardando...' : 'Guardar y generar PDF'}
         </button>
         <button type="button" onClick={handleImprimir} disabled={!ultimoPdf}>
-          Imprimir última remisión
+          Imprimir Ãºltima remisiÃ³n
         </button>
         <button type="button" onClick={handleDescargar} disabled={!ultimoPdf}>
           Descargar PDF

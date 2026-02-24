@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import {
   collection,
-  getDocsFromServer,
+  getDocs,
   query,
   where
 } from 'firebase/firestore';
@@ -25,7 +25,7 @@ async function resolverEmailPorIdentificador(identificadorInput) {
   const nombreNormalizado = normalizar(identificador);
 
   // Intento 1: coincidencia exacta por campo principal.
-  const exactaPorNombre = await getDocsFromServer(
+  const exactaPorNombre = await getDocs(
     query(usuariosRef, where('nombre', '==', nombreNormalizado))
   );
 
@@ -35,7 +35,7 @@ async function resolverEmailPorIdentificador(identificadorInput) {
   }
 
   // Intento 2: compatibilidad con otros campos o nombres no normalizados.
-  const todos = await getDocsFromServer(usuariosRef);
+  const todos = await getDocs(usuariosRef);
   const emailPorBusquedaFlexible = todos.docs
     .map((docSnap) => docSnap.data())
     .find((data) => {

@@ -7,7 +7,8 @@ import {
   collection,
   writeBatch,
   doc,
-  Timestamp
+  Timestamp,
+  increment
 } from 'firebase/firestore';
 import { useCaja } from '../context/CajaContext';
 import './PaginaCompras.css';
@@ -18,10 +19,6 @@ import { resolveAssetPath } from '../utils/assetPath';
 
 // ¡AÑADE ESTA LÍNEA! (Con la variable correcta de v2)
 const isTauriEnvironment = () => typeof window !== 'undefined' && Boolean(window.__TAURI_INTERNALS__);
-
-const formatConsecutivo = (num, prefix) => {
-  return `${prefix}${String(num).padStart(5, '0')}`;
-};
 
 const descargarTxt = (contenido, nombreArchivo) => {
   const element = document.createElement("a");
@@ -35,7 +32,7 @@ const descargarTxt = (contenido, nombreArchivo) => {
 
 
 function PaginaCompras() {
-  const { userProfile, base, consecutivos } = useCaja();
+  const { userProfile, base, obtenerConsecutivoParaModulo } = useCaja();
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [articulos, setArticulos] = useState([]);
@@ -269,12 +266,9 @@ function PaginaCompras() {
     try {
       // --- 1. LEER DATOS (¡Desde el ESTADO/CONTEXTO!) ---
       // ¡¡Ya no usamos getDoc()!!
-      const ultimoNum = consecutivos; // <-- CAMBIO (Viene de useCaja)
       const baseActual = base;         // <-- CAMBIO (Viene de useCaja)
-
-      // --- 2. CALCULAR ---
-      const nuevoNum = ultimoNum + 1;
-      const nuevoConsecutivoStr = formatConsecutivo(nuevoNum, "FAC");
+      const { consecutivo: nuevoConsecutivoStr, bloqueRef } =
+        await obtenerConsecutivoParaModulo('compras');
       
       if (totalCompra > baseActual) {
         throw new Error(`¡Error! Fondos insuficientes. Base: $${baseActual.toLocaleString('es-CO')}`);
@@ -296,11 +290,13 @@ function PaginaCompras() {
       // (Definimos las referencias aquí solo para escribir)
       const batch = writeBatch(db);
       const nuevaCompraRef = doc(collection(db, "compras"));
-      const consecRef = doc(db, "configuracion", "consecutivos");
       const movimientoCajaRef = doc(collection(db, "movimientos_caja"));
 
       batch.set(nuevaCompraRef, compraData);
-      batch.update(consecRef, { compras: nuevoNum });
+      batch.update(bloqueRef, {
+        siguiente: increment(1),
+        actualizadoEn: Timestamp.now(),
+      });
       batch.set(movimientoCajaRef, {
         tipo: "egreso",
         monto: totalCompra,
@@ -323,10 +319,8 @@ function PaginaCompras() {
         if (!articuloCompleto) {
           throw new Error(`Artículo ${itemEnCarrito.nombre} no encontrado en caché.`);
         }
-        const stockActual = articuloCompleto.stock || 0;
-        const nuevoStock = stockActual + itemEnCarrito.cantidad;
         const articuloRef = doc(db, "articulos", itemEnCarrito.articuloId);
-        batch.update(articuloRef, { stock: nuevoStock });
+        batch.update(articuloRef, { stock: increment(itemEnCarrito.cantidad) });
       });
 
       // --- 4. EJECUTAR LOTE (se guardará en cola si está offline) ---

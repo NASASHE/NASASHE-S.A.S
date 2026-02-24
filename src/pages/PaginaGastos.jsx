@@ -6,7 +6,8 @@ import {
   collection,
   doc,
   Timestamp,
-  runTransaction
+  writeBatch,
+  increment
 } from 'firebase/firestore';
 import { useCaja } from '../context/CajaContext';
 import './PaginaGastos.css';
@@ -15,10 +16,6 @@ import { imprimirTicketEnNavegador } from '../utils/imprimirTicket';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 
 const isTauriEnvironment = () => typeof window !== 'undefined' && Boolean(window.__TAURI_INTERNALS__);
-
-const formatConsecutivo = (num, prefix) => {
-  return `${prefix}${String(num).padStart(5, '0')}`;
-};
 
 const descargarTxt = (contenido, nombreArchivo) => {
   const element = document.createElement('a');
@@ -31,7 +28,7 @@ const descargarTxt = (contenido, nombreArchivo) => {
 };
 
 function PaginaGastos() {
-  const { userProfile, base } = useCaja();
+  const { userProfile, base, obtenerConsecutivoParaModulo } = useCaja();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [descripcion, setDescripcion] = useState('');
@@ -59,45 +56,42 @@ function PaginaGastos() {
       const nuevoGastoRef = doc(collection(db, 'gastos'));
       let gastoDataParaTicket = null;
 
-      await runTransaction(db, async (transaction) => {
-        const consecRef = doc(db, 'configuracion', 'consecutivos');
-        const consecDoc = await transaction.get(consecRef);
+      const { consecutivo: nuevoConsecutivoStr, bloqueRef } =
+        await obtenerConsecutivoParaModulo('gastos');
 
-        if (!consecDoc.exists()) {
-          throw new Error('Consecutivos no encontrados.');
-        }
+      const gastoData = {
+        consecutivo: nuevoConsecutivoStr,
+        descripcion: descripcionLimpia,
+        monto: montoNum,
+        fecha: Timestamp.now(),
+        usuario: userProfile?.nombre || 'SISTEMA'
+      };
+      gastoDataParaTicket = gastoData;
 
-        const ultimoNum = consecDoc.data().gastos ?? 0;
-        const nuevoNum = ultimoNum + 1;
-        const nuevoConsecutivoStr = formatConsecutivo(nuevoNum, 'GAS');
+      const batch = writeBatch(db);
+      const movimientoCajaRef = doc(collection(db, 'movimientos_caja'));
 
-        const gastoData = {
-          consecutivo: nuevoConsecutivoStr,
-          descripcion: descripcionLimpia,
-          monto: montoNum,
-          fecha: Timestamp.now(),
-          usuario: userProfile?.nombre || 'SISTEMA'
-        };
-        gastoDataParaTicket = gastoData;
-
-        const movimientoCajaRef = doc(collection(db, 'movimientos_caja'));
-
-        transaction.set(nuevoGastoRef, gastoData);
-        transaction.update(consecRef, { gastos: nuevoNum });
-        transaction.set(movimientoCajaRef, {
-          tipo: 'egreso',
-          monto: montoNum,
-          descripcion: `Gasto ${nuevoConsecutivoStr} - ${descripcionLimpia}`,
-          fecha: Timestamp.now(),
-          usuario: userProfile?.nombre || 'SISTEMA',
-          anulado: false,
-          referencia: {
-            coleccion: 'gastos',
-            id: nuevoGastoRef.id,
-            consecutivo: nuevoConsecutivoStr
-          }
-        });
+      batch.set(nuevoGastoRef, gastoData);
+      batch.update(bloqueRef, {
+        siguiente: increment(1),
+        actualizadoEn: Timestamp.now(),
       });
+      batch.set(movimientoCajaRef, {
+        tipo: 'egreso',
+        monto: montoNum,
+        descripcion: `Gasto ${nuevoConsecutivoStr} - ${descripcionLimpia}`,
+        fecha: Timestamp.now(),
+        usuario: userProfile?.nombre || 'SISTEMA',
+        anulado: false,
+        referencia: {
+          coleccion: 'gastos',
+          id: nuevoGastoRef.id,
+          consecutivo: nuevoConsecutivoStr
+        }
+      });
+
+      // Firestore lo deja en cola automÃ¡ticamente si no hay internet.
+      await batch.commit();
 
       setGastoReciente(gastoDataParaTicket);
       setDescripcion('');

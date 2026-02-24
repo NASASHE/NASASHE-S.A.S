@@ -1,4 +1,4 @@
-// src/pages/PaginaVentas.jsx
+﻿// src/pages/PaginaVentas.jsx
 
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
@@ -8,21 +8,17 @@ import {
   writeBatch, 
   doc,
   Timestamp,
-  runTransaction 
+  increment
 } from 'firebase/firestore';
 import { useCaja } from '../context/CajaContext';
-import './PaginaVentas.css'; // ¡CSS de Ventas!
-// ¡Importamos la NUEVA función de ticket!
+import './PaginaVentas.css'; // Â¡CSS de Ventas!
+// Â¡Importamos la NUEVA funciÃ³n de ticket!
 import { generarTextoTicketVenta } from '../utils/generarTickets';
 import { imprimirTicketEnNavegador } from '../utils/imprimirTicket';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 const isTauriEnvironment = () => typeof window !== 'undefined' && Boolean(window.__TAURI_INTERNALS__);
 
-const formatConsecutivo = (num, prefix) => {
-  return `${prefix}${String(num).padStart(5, '0')}`;
-};
-
-// Función de Descarga
+// FunciÃ³n de Descarga
 const descargarTxt = (contenido, nombreArchivo) => {
   const element = document.createElement("a");
   const file = new Blob([contenido], {type: 'text/plain;charset=utf-8'});
@@ -34,7 +30,7 @@ const descargarTxt = (contenido, nombreArchivo) => {
 };
 
 function PaginaVentas() {
-  const { userProfile, base } = useCaja(); // Traemos la base (solo para verla)
+  const { userProfile, base, obtenerConsecutivoParaModulo } = useCaja(); // Traemos la base (solo para verla)
   
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -56,7 +52,7 @@ function PaginaVentas() {
 
   const generarIdLocal = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 
-  // --- Cargar Proveedores y Artículos ---
+  // --- Cargar Proveedores y ArtÃ­culos ---
   const fetchDatosMaestros = async () => {
     setLoading(true);
     try {
@@ -93,15 +89,15 @@ function PaginaVentas() {
   }, [itemsVenta]);
 
   
-  // --- Añadir Item (con validación de stock) ---
+  // --- AÃ±adir Item (con validaciÃ³n de stock) ---
   const handleAddItem = () => {
     if (!articuloSeleccionadoId || !cantidad || Number(cantidad) <= 0) {
-      alert("Seleccione un artículo y una cantidad (peso) válida.");
+      alert("Seleccione un artÃ­culo y una cantidad (peso) vÃ¡lida.");
       return;
     }
     const articulo = articulos.find(a => a.id === articuloSeleccionadoId);
     if (!articulo) {
-      alert("Error: Artículo no encontrado.");
+      alert("Error: ArtÃ­culo no encontrado.");
       return;
     }
     const cantNum = Number(cantidad);
@@ -110,13 +106,13 @@ function PaginaVentas() {
     const itemExistente = itemsVenta.find(item => item.articuloId === articulo.id);
     const cantidadEnLista = itemExistente ? itemExistente.cantidad : 0;
 
-    // ¡Validación de Stock!
+    // Â¡ValidaciÃ³n de Stock!
     if ((cantNum + cantidadEnLista) > stockActual) {
-      alert(`¡No hay stock suficiente! Stock actual: ${stockActual}, Quieres vender: ${cantNum + cantidadEnLista}`);
+      alert(`Â¡No hay stock suficiente! Stock actual: ${stockActual}, Quieres vender: ${cantNum + cantidadEnLista}`);
       return;
     }
     
-    const subtotal = cantNum * articulo.precioVenta; // ¡Usamos precioVenta!
+    const subtotal = cantNum * articulo.precioVenta; // Â¡Usamos precioVenta!
     
     if (itemExistente) {
       setItemsVenta(prevState => 
@@ -134,7 +130,7 @@ function PaginaVentas() {
           articuloId: articulo.id,
           nombre: articulo.nombre,
           cantidad: cantNum,
-          precioVenta: articulo.precioVenta, // ¡precioVenta!
+          precioVenta: articulo.precioVenta, // Â¡precioVenta!
           subtotal: subtotal
         }
       ]);
@@ -144,7 +140,7 @@ function PaginaVentas() {
   };
 
   const handleAnularItem = (localId) => {
-    if (window.confirm('¿Desea eliminar este item de la prefactura?')) {
+    if (window.confirm('Â¿Desea eliminar este item de la prefactura?')) {
       setItemsVenta(prev => prev.filter(item => item.localId !== localId));
       setEditingItemId(prev => (prev === localId ? null : prev));
     }
@@ -180,10 +176,10 @@ function PaginaVentas() {
     );
   };
 
-  // --- Guardar Venta (¡Lógica Transaccional!) ---
+  // --- Guardar Venta (Â¡LÃ³gica Transaccional!) ---
   const handleSaveVenta = async () => {
     if (itemsVenta.length === 0) {
-      alert("No hay artículos en la venta.");
+      alert("No hay artÃ­culos en la venta.");
       return;
     }
     if (!proveedorSeleccionadoId) {
@@ -193,62 +189,61 @@ function PaginaVentas() {
     setIsSubmitting(true);
 
     let ventaDataParaTicket = null;
-    let nuevoConsecutivoStr = "";
 
     try {
       const nuevaVentaRef = doc(collection(db, "ventas"));
       const proveedorObj = proveedores.find(p => p.id === proveedorSeleccionadoId);
 
-      await runTransaction(db, async (transaction) => {
-        // --- 1. LEER TODO ---
-        const consecRef = doc(db, "configuracion", "consecutivos");
-        const consecDoc = await transaction.get(consecRef);
-        if (!consecDoc.exists()) throw new Error("Consecutivos no encontrados");
+      const { consecutivo: nuevoConsecutivoStr, bloqueRef } =
+        await obtenerConsecutivoParaModulo('ventas');
         
-        const articulosRefs = itemsVenta.map(item => doc(db, "articulos", item.articuloId));
-        const articulosDocs = await Promise.all(articulosRefs.map(ref => transaction.get(ref)));
+      const ventaData = {
+        consecutivo: nuevoConsecutivoStr,
+        proveedor: { // Guardamos los datos del cliente
+          id: proveedorObj.id,
+          nombre: proveedorObj.nombre,
+          nit: proveedorObj.nit
+        },
+        items: itemsVenta,
+        total: totalVenta,
+        fecha: Timestamp.now(),
+        usuario: userProfile?.nombre || 'SISTEMA'
+      };
+      ventaDataParaTicket = ventaData;
 
-        // --- 2. CALCULAR ---
-        const ultimoNum = consecDoc.data().ventas; // <-- Consecutivo de VENTAS
-        const nuevoNum = ultimoNum + 1;
-        nuevoConsecutivoStr = formatConsecutivo(nuevoNum, "FAV"); // <-- Prefijo FAV
-        
-        const ventaData = {
-          consecutivo: nuevoConsecutivoStr,
-          proveedor: { // Guardamos los datos del cliente
-            id: proveedorObj.id,
-            nombre: proveedorObj.nombre,
-            nit: proveedorObj.nit
-          },
-          items: itemsVenta,
-          total: totalVenta,
-          fecha: Timestamp.now(),
-          usuario: userProfile?.nombre || 'SISTEMA'
-        };
-        ventaDataParaTicket = ventaData;
-
-        // --- 3. ESCRIBIR TODO ---
-        transaction.set(nuevaVentaRef, ventaData);
-        transaction.update(consecRef, { ventas: nuevoNum }); // <-- Actualiza 'ventas'
-
-        // ¡RESTAR el stock!
-        articulosDocs.forEach((artDoc, index) => {
-          if (!artDoc.exists()) throw new Error(`Artículo ${itemsVenta[index].nombre} no encontrado`);
-          
-          const stockActual = artDoc.data().stock || 0;
-          const nuevoStock = stockActual - itemsVenta[index].cantidad;
-          if (nuevoStock < 0) throw new Error(`Stock insuficiente para ${itemsVenta[index].nombre}`);
-          
-          transaction.update(artDoc.ref, { stock: nuevoStock });
-        });
+      // Validacion local de stock antes de escribir en cola offline.
+      itemsVenta.forEach((item) => {
+        const articuloCompleto = articulos.find((a) => a.id === item.articuloId);
+        if (!articuloCompleto) {
+          throw new Error(`Articulo ${item.nombre} no encontrado en cache.`);
+        }
+        const stockActual = Number(articuloCompleto.stock) || 0;
+        if (item.cantidad > stockActual) {
+          throw new Error(`Stock insuficiente para ${item.nombre}`);
+        }
       });
 
-      // --- 4. TRANSACCIÓN EXITOSA ---
+      const batch = writeBatch(db);
+      batch.set(nuevaVentaRef, ventaData);
+      batch.update(bloqueRef, {
+        siguiente: increment(1),
+        actualizadoEn: Timestamp.now(),
+      });
+
+      itemsVenta.forEach((item) => {
+        const articuloRef = doc(db, "articulos", item.articuloId);
+        batch.update(articuloRef, { stock: increment(-item.cantidad) });
+      });
+
+      // Firestore lo deja en cola automaticamente si no hay internet.
+      await batch.commit();
+
+      // --- 4. TRANSACCIÃ“N EXITOSA ---
       await fetchDatosMaestros(); // Refresca el stock en los dropdowns
 
       setVentaReciente(ventaDataParaTicket); 
       setProveedorSeleccionadoId('');
-      // ¡No limpiamos itemsVenta aún!
+      // Â¡No limpiamos itemsVenta aÃºn!
 
     } catch (error) {
       console.error("Error al guardar la venta: ", error);
@@ -257,7 +252,7 @@ function PaginaVentas() {
     setIsSubmitting(false);
   };
 
-  // --- Lógica de Impresión/Descarga (¡ACTUALIZADA!) ---
+  // --- LÃ³gica de ImpresiÃ³n/Descarga (Â¡ACTUALIZADA!) ---
 
   const printVentaEnNavegador = (ventaData) => {
     const textoTicket = generarTextoTicketVenta(ventaData, userProfile);
@@ -267,7 +262,7 @@ function PaginaVentas() {
     });
 
     if (!exito) {
-      alert('No se pudo preparar la impresión del ticket en el navegador. Verifica la configuración de impresión e inténtalo nuevamente.');
+      alert('No se pudo preparar la impresiÃ³n del ticket en el navegador. Verifica la configuraciÃ³n de impresiÃ³n e intÃ©ntalo nuevamente.');
     }
   };
 
@@ -290,7 +285,7 @@ function PaginaVentas() {
       });
 
       webview.once('tauri://error', (e) => {
-        console.error('Error al crear ventana de impresión:', e);
+        console.error('Error al crear ventana de impresiÃ³n:', e);
         printVentaEnNavegador(ventaReciente);
       });
     }
@@ -344,16 +339,16 @@ function PaginaVentas() {
             </select>
           </div>
           <hr />
-          <h3>Añadir Artículos</h3>
+          <h3>AÃ±adir ArtÃ­culos</h3>
           <div className="form-grupo">
-            <label htmlFor="articulo">Artículo:</label>
+            <label htmlFor="articulo">ArtÃ­culo:</label>
             <select 
               id="articulo" 
               value={articuloSeleccionadoId}
               onChange={(e) => setArticuloSeleccionadoId(e.target.value)}
               disabled={ventaReciente}
             >
-              <option value="">-- Seleccione un Artículo --</option>
+              <option value="">-- Seleccione un ArtÃ­culo --</option>
               {articulos.map(a => (
                 <option key={a.id} value={a.id}>
                   {a.nombre} (${a.precioVenta}/kg) - Stock: {(Number(a.stock) || 0).toFixed(2)}
@@ -374,10 +369,10 @@ function PaginaVentas() {
           <button 
             type="button" 
             onClick={handleAddItem} 
-            className="btn-anadir-item-venta" // Botón verde
+            className="btn-anadir-item-venta" // BotÃ³n verde
             disabled={ventaReciente}
           >
-            Añadir Item a la Venta
+            AÃ±adir Item a la Venta
           </button>
         </div>
 
@@ -387,7 +382,7 @@ function PaginaVentas() {
           <table className="pre-factura-tabla">
             <thead>
               <tr>
-                <th>Artículo</th>
+                <th>ArtÃ­culo</th>
                 <th>Cant.</th>
                 <th>Precio Venta</th>
                 <th>Subtotal</th>
@@ -397,7 +392,7 @@ function PaginaVentas() {
             <tbody>
               {(ventaReciente ? ventaReciente.items : itemsVenta).length === 0 ? (
                 <tr>
-                  <td colSpan="4" style={{textAlign: 'center'}}>Añade artículos...</td>
+                  <td colSpan="4" style={{textAlign: 'center'}}>AÃ±ade artÃ­culos...</td>
                 </tr>
               ) : (
                 (ventaReciente ? ventaReciente.items : itemsVenta).map((item, index) => (
@@ -459,7 +454,7 @@ function PaginaVentas() {
             {ventaReciente ? (
               // --- VISTA POST-GUARDADO ---
               <>
-                <p className="venta-exitosa">¡Venta {ventaReciente.consecutivo} guardada!</p>
+                <p className="venta-exitosa">Â¡Venta {ventaReciente.consecutivo} guardada!</p>
                 <button type="button" onClick={handleImprimir} className="btn-imprimir-ticket">
                   Imprimir Ticket
                 </button>
