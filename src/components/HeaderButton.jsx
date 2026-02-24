@@ -2,6 +2,7 @@ import React from 'react';
 import './HeaderButton.css';
 // 1. IMPORTAMOS 'Link'
 import { Link } from 'react-router-dom';
+import { resolveAssetPath } from '../utils/assetPath';
 
 // 2. AÑADIMOS 'to' A LAS PROPS
 function HeaderButton({ texto, icono, to }) {
@@ -11,7 +12,7 @@ function HeaderButton({ texto, icono, to }) {
     <Link to={to} className="header-button">
       
       <img 
-        src={icono} 
+        src={resolveAssetPath(icono)} 
         alt={texto} 
         className="header-button-icon" 
       />

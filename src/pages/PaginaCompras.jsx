@@ -14,6 +14,7 @@ import './PaginaCompras.css';
 import { generarTextoTicketCompra } from '../utils/generarTickets';
 import { imprimirTicketEnNavegador } from '../utils/imprimirTicket';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { resolveAssetPath } from '../utils/assetPath';
 
 // ¡AÑADE ESTA LÍNEA! (Con la variable correcta de v2)
 const isTauriEnvironment = () => typeof window !== 'undefined' && Boolean(window.__TAURI_INTERNALS__);
@@ -476,7 +477,7 @@ function PaginaCompras() {
 
           <div className="imagen-preview-container">
             {imagenPreviewUrl ? (
-              <img src={imagenPreviewUrl} alt="Vista previa del material" />
+              <img src={resolveAssetPath(imagenPreviewUrl)} alt="Vista previa del material" />
             ) : (
               <span style={{color: '#888'}}>Imagen del material</span>
             )}

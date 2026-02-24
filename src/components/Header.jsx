@@ -5,6 +5,7 @@ import './Header.css';
 import HeaderButton from './HeaderButton';
 import { useCaja } from '../context/CajaContext';
 import { Link } from 'react-router-dom';
+import { resolveAssetPath } from '../utils/assetPath';
 
 function Header() {
   
@@ -16,7 +17,7 @@ function Header() {
       
       <Link to="/" className="header-logo-link">
         {/* 1. ¡AQUÍ ESTÁ EL LOGO! */}
-        <img src="/logo.png" alt="Logo Nasashe" className="header-logo-img" />
+        <img src={resolveAssetPath('/logo.png')} alt="Logo Nasashe" className="header-logo-img" />
         
         <div className="header-logo">
           NASASHE
