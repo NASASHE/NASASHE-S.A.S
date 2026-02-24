@@ -12,7 +12,6 @@ import {
 } from 'firebase/firestore';
 import './PaginaArticulos.css';
 import { showMessage } from '../utils/showMessage';
-import { normalizeStoredAssetPath, resolveAssetPath } from '../utils/assetPath';
 
 // 1. ¡NUEVO! Lista de todas tus imágenes en la carpeta /public/icons/
 const listaDeImagenes = [
@@ -94,7 +93,7 @@ function PaginaArticulos() {
         precioCompra: precioCompraNum,
         precioVenta: precioVentaNum,
         stock: stockNum || 0,
-        imagenUrl: normalizeStoredAssetPath(nuevaImagenUrl || '')
+        imagenUrl: nuevaImagenUrl || '' // Se guarda la URL completa
       });
       setNuevoNombre('');
       setNuevoPrecioCompra('');
@@ -146,7 +145,7 @@ function PaginaArticulos() {
       precioCompra: articulo.precioCompra,
       precioVenta: articulo.precioVenta,
       stock: articulo.stock,
-      imagenUrl: normalizeStoredAssetPath(articulo.imagenUrl || '')
+      imagenUrl: articulo.imagenUrl || ''
     });
   };
 
@@ -163,7 +162,7 @@ function PaginaArticulos() {
       precioCompra: Number(editFormData.precioCompra),
       precioVenta: Number(editFormData.precioVenta),
       stock: Number(editFormData.stock) || 0,
-      imagenUrl: normalizeStoredAssetPath(editFormData.imagenUrl || '')
+      imagenUrl: editFormData.imagenUrl || ''
     };
     if (!datosActualizados.nombre || datosActualizados.precioCompra <= 0 || datosActualizados.precioVenta <= 0) {
       await showMessage("Por favor, completa Nombre y ambos Precios con valores válidos.", {
@@ -233,7 +232,7 @@ function PaginaArticulos() {
             >
               <option value="">-- Sin imagen --</option>
               {listaDeImagenes.map(imagen => (
-                <option key={imagen} value={`icons/${imagen}`}>
+                <option key={imagen} value={`/icons/${imagen}`}>
                   {imagen}
                 </option>
               ))}
@@ -274,7 +273,7 @@ function PaginaArticulos() {
                       >
                         <option value="">-- Sin imagen --</option>
                         {listaDeImagenes.map(imagen => (
-                          <option key={imagen} value={`icons/${imagen}`}>
+                          <option key={imagen} value={`/icons/${imagen}`}>
                             {imagen}
                           </option>
                         ))}
@@ -293,7 +292,7 @@ function PaginaArticulos() {
                   /* --- MODO VISTA --- */
                   <>
                     <td className="articulo-imagen-cell">
-                      {articulo.imagenUrl && <img src={resolveAssetPath(articulo.imagenUrl)} alt={articulo.nombre} />}
+                      {articulo.imagenUrl && <img src={articulo.imagenUrl} alt={articulo.nombre} />}
                     </td>
                     <td>{articulo.nombre}</td>
                     <td>${articulo.precioCompra.toLocaleString('es-CO')}</td>

@@ -7,7 +7,6 @@ import autoTable from 'jspdf-autotable';
 import { collection, doc, getDocs, runTransaction, Timestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useCaja } from '../context/CajaContext';
-import { resolveAssetPath } from '../utils/assetPath';
 
 const formatConsecutivo = (numero) => `REM-${String(numero).padStart(6, '0')}`;
 
@@ -201,7 +200,7 @@ function PaginaRemisiones() {
     let cursorY = margin;
 
     try {
-      const logoData = await cargarImagenComoBase64(encodeURI(resolveAssetPath('logo con fondo.png')));
+      const logoData = await cargarImagenComoBase64(encodeURI('/logo con fondo.png'));
       doc.addImage(logoData, 'PNG', margin, cursorY, 40, 20);
     } catch (error) {
       console.warn('No se pudo cargar el logo para el PDF:', error);
@@ -406,7 +405,7 @@ function PaginaRemisiones() {
           <p>Genera y guarda remisiones con consecutivo y descarga el PDF listo para impresión.</p>
           <p className="remisiones-consecutivo">Próximo consecutivo: <strong>{formatConsecutivo(siguienteNumeroRemision)}</strong></p>
         </div>
-        <img src={resolveAssetPath('logo con fondo.png')} alt="Logo Nasashe" className="remisiones-logo" />
+        <img src="/logo con fondo.png" alt="Logo Nasashe" className="remisiones-logo" />
       </div>
 
       <section className="remisiones-panel">

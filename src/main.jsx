@@ -2,21 +2,25 @@
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter } from 'react-router-dom';
+import { BrowserRouter, HashRouter } from 'react-router-dom';
 import App from './App.jsx';
 import './index.css';
 import { CajaProvider } from './context/CajaContext';
+import { isTauri } from './tauriSafe';
 
-// En dev la app vive en '/', en produccion en '/NASASHE-SAS/'.
+// Solo aplica basename cuando la base es absoluta (hosting web).
+const baseUrl = import.meta.env.BASE_URL || '/';
 const routerBasename =
-  import.meta.env.BASE_URL === '/' ? undefined : import.meta.env.BASE_URL.replace(/\/$/, '');
+  baseUrl.startsWith('/') && baseUrl !== '/' ? baseUrl.replace(/\/$/, '') : undefined;
+const Router = isTauri ? HashRouter : BrowserRouter;
+const routerProps = isTauri ? {} : { basename: routerBasename };
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <CajaProvider>
-      <BrowserRouter basename={routerBasename}>
+      <Router {...routerProps}>
         <App />
-      </BrowserRouter>
+      </Router>
     </CajaProvider>
   </React.StrictMode>,
 );
